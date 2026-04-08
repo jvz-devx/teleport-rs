@@ -1,0 +1,8 @@
+{
+  "name": "teleport-rs-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/client",
+    "packages/vite"
+  ]
+}

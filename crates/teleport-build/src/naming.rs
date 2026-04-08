@@ -1,0 +1,70 @@
+/// Convert a `snake_case` identifier to `camelCase`.
+///
+/// # Examples
+///
+/// ```
+/// use teleport_build::naming::snake_to_camel;
+///
+/// assert_eq!(snake_to_camel("get_user"), "getUser");
+/// assert_eq!(snake_to_camel("get_user_profile"), "getUserProfile");
+/// assert_eq!(snake_to_camel("id"), "id");
+/// assert_eq!(snake_to_camel(""), "");
+/// ```
+#[must_use]
+pub fn snake_to_camel(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut capitalize_next = false;
+
+    for ch in s.chars() {
+        if ch == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.extend(ch.to_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_word() {
+        assert_eq!(snake_to_camel("user"), "user");
+    }
+
+    #[test]
+    fn two_words() {
+        assert_eq!(snake_to_camel("get_user"), "getUser");
+    }
+
+    #[test]
+    fn three_words() {
+        assert_eq!(snake_to_camel("get_user_profile"), "getUserProfile");
+    }
+
+    #[test]
+    fn empty_string() {
+        assert_eq!(snake_to_camel(""), "");
+    }
+
+    #[test]
+    fn already_camel() {
+        assert_eq!(snake_to_camel("getUser"), "getUser");
+    }
+
+    #[test]
+    fn leading_underscore() {
+        assert_eq!(snake_to_camel("_private"), "Private");
+    }
+
+    #[test]
+    fn consecutive_underscores() {
+        assert_eq!(snake_to_camel("get__user"), "getUser");
+    }
+}

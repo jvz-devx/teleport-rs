@@ -1,0 +1,17 @@
+[package]
+name = "teleport"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
+inventory = { workspace = true }
+teleport-macros = { path = "../teleport-macros" }
+
+[features]
+default = []
+debug-manifest = []
