@@ -8,7 +8,7 @@ pub mod private;
 
 // Re-exports for user-facing API.
 pub use error::AppError;
-pub use extractors::AuthedUser;
+pub use extractors::{AuthedUser, QsQuery};
 pub use procedure::{HttpMethod, ProcedureRegistration, ProcedureType};
-pub use router::TeleportRouter;
+pub use router::{Manifest, ManifestEntry, TeleportRouter};
 pub use teleport_macros::{remote, teleport_type};

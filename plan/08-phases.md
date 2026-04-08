@@ -42,28 +42,30 @@ A Rust crate where `#[remote(query)] fn get_user(...)` proc macro compiles, and 
 
 ### Tasks
 
-- [ ] Implement `TeleportRouter` struct
-  - [ ] `new()` — creates empty router
-  - [ ] `state(state: Arc<AppState>)` — sets shared state
-  - [ ] `mount()` — collects procedures and builds Axum Router
-- [ ] Implement Axum route generation from `ProcedureRegistration`
-  - [ ] GET routes for `query` procedures (input as query params)
-  - [ ] POST routes for `command` procedures (input as JSON body)
-  - [ ] POST routes for `form` procedures (input as JSON body, from FormData)
-  - [ ] All routes under `/rpc/{namespace}.{name}` prefix
-- [ ] Implement `AppError<T>` → Axum `IntoResponse`
-  - [ ] Map error variants to HTTP status codes
-  - [ ] Serialize error body as JSON
-- [ ] Implement `TeleportType` → Axum extractor bridge
-  - [ ] Deserialize input from query params (GET) or JSON body (POST)
-  - [ ] Inject `State<Arc<AppState>>` as first parameter
-  - [ ] Inject `Extension<AuthedUser>` if present in signature
-- [ ] Add optional debug manifest endpoint `GET /rpc/__manifest`
-- [ ] Write integration tests with `axum::test`
-  - [ ] Test GET query with input
-  - [ ] Test POST command with input
-  - [ ] Test error responses (AppError variants)
-  - [ ] Test 404 for unknown procedures
+- [x] Implement `TeleportRouter` struct
+  - [x] `new()` — creates empty router
+  - [x] `state(state: Arc<AppState>)` — sets shared state
+  - [x] `mount()` — collects procedures and builds Axum Router
+- [x] Implement Axum route generation from `ProcedureRegistration`
+  - [x] GET routes for `query` procedures (input via serde_qs query params)
+  - [x] POST routes for `command` procedures (input as JSON body)
+  - [x] POST routes for `form` procedures (input as JSON body, from FormData)
+  - [x] All routes under `/rpc/{namespace}.{name}` prefix
+- [x] Implement `AppError<T>` → Axum `IntoResponse`
+  - [x] Map error variants to HTTP status codes
+  - [x] Serialize error body as JSON
+- [x] Implement `TeleportType` → Axum extractor bridge
+  - [x] Deserialize input from query params (GET) or JSON body (POST)
+  - [x] Inject `State<Arc<AppState>>` as first parameter
+  - [x] Inject `Extension<AuthedUser>` if present in signature
+- [x] Add optional debug manifest endpoint `GET /rpc/__manifest`
+- [x] Write integration tests with `axum::test`
+  - [x] Test GET query with input
+  - [x] Test POST command with input
+  - [x] Test error responses (AppError variants)
+  - [x] Test 404 for unknown procedures
+  - [x] Test auth (with/without AuthedUser)
+  - [x] Test form procedure
 
 ### Deliverable
 
@@ -79,20 +81,20 @@ A working Axum server that serves `#[remote]` procedures as HTTP endpoints. You 
 
 ### Tasks
 
-- [ ] Implement `@teleport-rs/client` npm package
-  - [ ] `rpc()` function — core HTTP fetch wrapper
-  - [ ] Result type — `RpcResult<T, E>` with transport vs app error distinction
-  - [ ] Helper functions — `isAppError()`, `isTransportError()`, `unwrap()`
-  - [ ] `configure()` — set baseUrl, timeout, credentials, headers
-- [ ] Implement client generation in `teleport-build`
-  - [ ] Generate namespace objects (`auth`, `users`, `posts`)
-  - [ ] Generate `rpc()` calls with correct types for each procedure
-  - [ ] snake_case → camelCase naming conversion
-  - [ ] Handle procedures with no input (void input)
-  - [ ] Handle procedures with `Option<AuthedUser>` (auth-required vs auth-optional)
-- [ ] Write `client.ts` template with proper imports from `types.ts` and `errors.ts`
-- [ ] Write unit tests for naming conversion
-- [ ] Write integration tests: define Rust procedures, generate client.ts, verify it compiles with TS
+- [x] Implement `@teleport-rs/client` npm package
+  - [x] `rpc()` function — core HTTP fetch wrapper (with qs serialization for GET)
+  - [x] Result type — `RpcResult<T, E>` with transport vs app error distinction
+  - [x] Helper functions — `isAppError()`, `isTransportError()`, `unwrap()`
+  - [x] `configure()` — set baseUrl, timeout, credentials, headers
+- [x] Implement client generation in `teleport-build`
+  - [x] Generate namespace objects (`auth`, `users`, `posts`)
+  - [x] Generate `rpc()` calls with correct types for each procedure
+  - [x] snake_case → camelCase naming conversion
+  - [x] Handle procedures with no input (void input)
+  - [x] Handle procedures with `Option<AuthedUser>` (auth-required vs auth-optional)
+- [x] Write `client.ts` template with proper imports from `types.ts` and `errors.ts`
+- [x] Write unit tests for naming conversion
+- [x] Write integration tests: define Rust procedures, generate client.ts, verify output
 
 ### Deliverable
 

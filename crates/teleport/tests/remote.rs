@@ -169,3 +169,92 @@ fn find_by_fn_name(name: &str) -> &'static ProcedureRegistration {
         .find(|r| r.fn_name == name)
         .unwrap_or_else(|| panic!("no procedure with fn_name = {name:?}"))
 }
+
+// ---------------------------------------------------------------------------
+// Manifest tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn manifest_endpoint_returns_procedures() {
+    use http::Request;
+    use tower::ServiceExt;
+
+    let router = TeleportRouter::new()
+        .state(Arc::new(AppState))
+        .manifest(true)
+        .mount();
+
+    let request = Request::builder()
+        .uri("/rpc/__manifest")
+        .method("GET")
+        .body(axum::body::Body::empty())
+        .expect("failed to build request");
+
+    let response = router.oneshot(request).await.expect("request failed");
+
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .expect("missing content-type header");
+    assert!(
+        content_type
+            .to_str()
+            .unwrap_or("")
+            .contains("application/json"),
+        "expected application/json content-type"
+    );
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("failed to read body");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&body).expect("invalid JSON in manifest");
+
+    let procedures = manifest
+        .get("procedures")
+        .expect("missing 'procedures' key");
+    assert!(procedures.is_object(), "procedures should be an object");
+
+    // Verify a known query procedure is present with GET method.
+    let get_user = procedures
+        .get("remote.getUser")
+        .expect("missing remote.getUser");
+    assert_eq!(get_user["method"], "GET");
+    assert_eq!(get_user["path"], "/rpc/remote.getUser");
+
+    // Verify a known command procedure is present with POST method.
+    let create_user = procedures
+        .get("remote.createUser")
+        .expect("missing remote.createUser");
+    assert_eq!(create_user["method"], "POST");
+    assert_eq!(create_user["path"], "/rpc/remote.createUser");
+
+    // Verify prefix override is reflected.
+    let admin = procedures
+        .get("admin.deleteEverything")
+        .expect("missing admin.deleteEverything");
+    assert_eq!(admin["path"], "/rpc/admin.deleteEverything");
+}
+
+#[tokio::test]
+async fn manifest_disabled_returns_404() {
+    use http::Request;
+    use tower::ServiceExt;
+
+    let router = TeleportRouter::new()
+        .state(Arc::new(AppState))
+        .manifest(false)
+        .mount();
+
+    let request = Request::builder()
+        .uri("/rpc/__manifest")
+        .method("GET")
+        .body(axum::body::Body::empty())
+        .expect("failed to build request");
+
+    let response = router.oneshot(request).await.expect("request failed");
+
+    assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+}

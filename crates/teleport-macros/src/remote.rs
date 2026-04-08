@@ -404,7 +404,7 @@ fn gen_handler(
 
     let input_extract = sig.input_ty.as_ref().map(|input| match remote_attr.proc_type {
         ProcType::Query => quote! {
-            axum::extract::Query(input): axum::extract::Query<#input>
+            teleport::QsQuery(input): teleport::QsQuery<#input>
         },
         ProcType::Command | ProcType::Form => quote! {
             axum::Json(input): axum::Json<#input>

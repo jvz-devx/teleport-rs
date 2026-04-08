@@ -1,6 +1,7 @@
 use axum::extract::FromRequestParts;
 use axum::extract::OptionalFromRequestParts;
 use axum::http::request::Parts;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
@@ -42,5 +43,28 @@ where
         _state: &S,
     ) -> Result<Option<Self>, Self::Rejection> {
         Ok(parts.extensions.get::<Self>().cloned())
+    }
+}
+
+/// Query parameter extractor using `serde_qs` for bracket-notation support.
+///
+/// Unlike Axum's built-in `Query<T>` (which uses `serde_urlencoded`), this
+/// handles nested objects (`filter[status]=active`) and arrays
+/// (`tags[0]=foo&tags[1]=bar`) as produced by JavaScript's `qs.stringify()`.
+pub struct QsQuery<T>(pub T);
+
+impl<S, T> FromRequestParts<S> for QsQuery<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let query = parts.uri.query().unwrap_or_default();
+        let value = serde_qs::from_str(query).map_err(|e| AppError::BadRequest {
+            message: e.to_string(),
+        })?;
+        Ok(Self(value))
     }
 }

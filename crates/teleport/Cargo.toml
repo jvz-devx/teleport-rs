@@ -8,6 +8,7 @@ rust-version.workspace = true
 axum = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_qs = { workspace = true }
 specta = { workspace = true }
 inventory = { workspace = true }
 teleport-macros = { path = "../teleport-macros" }
@@ -20,6 +21,8 @@ serde_json = { workspace = true }
 teleport-build = { path = "../teleport-build" }
 specta-typescript = { workspace = true }
 tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http = "1"
 
 [features]
 default = []
