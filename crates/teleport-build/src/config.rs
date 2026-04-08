@@ -8,8 +8,6 @@ pub struct Config {
     pub namespace_style: NamespaceStyle,
     /// Naming conventions for generated TypeScript identifiers.
     pub naming: Naming,
-    /// Whether to include the debug manifest endpoint.
-    pub include_manifest: bool,
     /// URL prefix for all RPC routes (e.g. `"/rpc"`).
     pub route_prefix: String,
     /// Override the import path for the `rpc` function.
@@ -24,17 +22,9 @@ impl Config {
             output_dir: output_dir.into(),
             namespace_style: NamespaceStyle::default(),
             naming: Naming::default(),
-            include_manifest: false,
             route_prefix: "/rpc".to_owned(),
             client_import_path: None,
         }
-    }
-
-    /// Include or exclude the debug manifest endpoint.
-    #[must_use]
-    pub const fn with_manifest(mut self, include: bool) -> Self {
-        self.include_manifest = include;
-        self
     }
 
     /// Set a URL prefix for all RPC routes.

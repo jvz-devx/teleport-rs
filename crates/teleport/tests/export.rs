@@ -73,14 +73,7 @@ async fn list_users(_ctx: &TestState) -> Result<Vec<User>, AppError> {
 // ---------------------------------------------------------------------------
 
 fn test_config(output_dir: std::path::PathBuf) -> Config {
-    Config {
-        output_dir,
-        namespace_style: NamespaceStyle::default(),
-        naming: Naming::default(),
-        include_manifest: false,
-        route_prefix: "/rpc".to_owned(),
-        client_import_path: None,
-    }
+    Config::new(output_dir)
 }
 
 // ---------------------------------------------------------------------------

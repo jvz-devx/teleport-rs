@@ -293,7 +293,7 @@ mod tests {
             output_dir: PathBuf::from("/tmp/test"),
             namespace_style: NamespaceStyle::ModulePath,
             naming: Naming::default(),
-            include_manifest: false,
+
             route_prefix: "/rpc".to_owned(),
             client_import_path: None,
         }

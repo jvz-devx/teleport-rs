@@ -36,7 +36,7 @@ Specta for type introspection, and the inventory crate for runtime procedure col
 
 1. `#[remote(query|command|form)]` proc macro generates an Axum handler + `inventory::submit!` block
 2. `TeleportRouter::mount()` calls `inventory::collect` at runtime to discover all procedures
-3. `cargo run --bin export` runs the same collection and writes `types.ts`, `errors.ts`, `client.ts`
+3. `TeleportRouter::export()` runs the same collection and writes `types.ts`, `errors.ts`, `client.ts`, `index.ts`
 4. The SvelteKit frontend imports the generated client — browser never calls Rust directly
 
 ## Error Handling
