@@ -1,7 +1,6 @@
 /** Error from the transport layer (network, timeout, serialization). */
 export type TransportError =
   | { type: "NetworkError"; message: string }
-  | { type: "SerializationError"; message: string }
   | { type: "Timeout"; message: string }
   | { type: "ServerError"; status: number; body: string };
 

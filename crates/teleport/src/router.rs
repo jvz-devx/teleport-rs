@@ -253,9 +253,14 @@ where
     /// Bindings are generated before the router is built.
     #[must_use]
     #[allow(clippy::print_stderr)]
+    /// # Panics
+    ///
+    /// Panics if TypeScript generation fails (e.g. output directory not writable).
+    /// This is intentional — a broken export should not be silently ignored.
+    #[allow(clippy::panic)]
     pub fn export_ts(self, config: &teleport_build::Config) -> Self {
         if let Err(e) = teleport_build::export_from_inventory(config) {
-            eprintln!("teleport-rs: failed to export TypeScript bindings: {e}");
+            panic!("teleport-rs: failed to export TypeScript bindings: {e}");
         }
         self
     }

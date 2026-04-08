@@ -113,10 +113,14 @@ npm install @teleport-rs/client @teleport-rs/vite
 Configure the Vite plugin in `vite.config.ts`:
 
 ```typescript
-import { teleport } from "@teleport-rs/vite";
+import { teleportVite } from "@teleport-rs/vite";
 
 export default {
-    plugins: [teleport()],
+    plugins: [
+        teleportVite({
+            bindingsPath: "src/lib/api/generated",
+        }),
+    ],
 };
 ```
 

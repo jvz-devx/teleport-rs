@@ -44,7 +44,7 @@ export const login = command(
 export const getMyProfile = query(async () => {
 	// Cookies are forwarded automatically because we configured
 	// `credentials: "include"` in src/lib/api/config.ts.
-	return mapError(await auth.me(), (error) => {
+	return mapError(await auth.getProfile(), (error) => {
 		if (error.type === 'Unauthorized') return null;
 		throw new Error(error.type);
 	});
@@ -55,6 +55,6 @@ export const getMyProfile = query(async () => {
 export const createPost = form(
 	z.object({ title: z.string().min(1), body: z.string().min(1) }),
 	async (input) => {
-		return rpcUnwrap(await posts.create(input));
+		return rpcUnwrap(await posts.createPost(input));
 	},
 );

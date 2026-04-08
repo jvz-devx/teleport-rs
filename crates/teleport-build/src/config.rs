@@ -57,7 +57,11 @@ impl Config {
 }
 
 /// Strategy for deriving procedure namespaces.
+///
+/// Currently only `ModulePath` is supported. This enum exists as an
+/// extension point for future namespace strategies (e.g. flat, custom).
 #[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
 pub enum NamespaceStyle {
     /// Derive namespace from the Rust module path (e.g. `api::users` -> `users`).
     #[default]
@@ -79,7 +83,11 @@ impl Default for Naming {
 }
 
 /// Case convention for TypeScript identifiers.
+///
+/// Currently only `CamelCase` is supported. This enum exists as an
+/// extension point for future naming strategies (e.g. PascalCase, snake_case passthrough).
 #[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
 pub enum NamingCase {
     /// `snake_case` -> `camelCase` (TypeScript convention).
     #[default]
