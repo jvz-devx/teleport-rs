@@ -1,60 +1,45 @@
 import type { Plugin, ViteDevServer } from "vite";
-import { watch } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
+import { createBindingsWatcher } from "./watcher.js";
 
+/** Configuration options for the teleport-rs Vite plugin. */
 export interface TeleportViteOptions {
-  /** Path to the generated bindings directory. */
+  /**
+   * Path to the directory containing generated TypeScript bindings.
+   *
+   * @example "../rust-server/bindings"
+   */
   bindingsPath: string;
-  /** Whether to trigger generation on dev server start. */
+
+  /**
+   * When `true`, runs `cargo run --bin export` at dev-server start
+   * to ensure bindings are up-to-date before the first page load.
+   *
+   * @default false
+   */
   generateOnStart?: boolean;
 }
 
+/**
+ * Vite plugin that watches teleport-rs generated bindings and triggers
+ * granular HMR updates when they change.
+ */
 export function teleportVite(options: TeleportViteOptions): Plugin {
   return {
     name: "teleport-rs",
 
+    async buildStart() {
+      if (options.generateOnStart) {
+        const { execSync } = await import("node:child_process");
+        execSync("cargo run --bin export", { stdio: "inherit" });
+      }
+    },
+
     configureServer(server: ViteDevServer) {
-      const bindingsDir = dirname(resolve(options.bindingsPath));
+      const bindingsDir = resolve(options.bindingsPath);
+      const watcher = createBindingsWatcher(server, bindingsDir);
 
-      watch(bindingsDir, (_eventType, filename) => {
-        if (!filename?.endsWith(".ts")) return;
-
-        const filePath = resolve(bindingsDir, filename);
-        const mods = server.moduleGraph.getModulesByFile(filePath);
-
-        if (mods && mods.size > 0) {
-          const updates: Array<{
-            type: "js-update";
-            path: string;
-            acceptedPath: string;
-            timestamp: number;
-          }> = [];
-          const timestamp = Date.now();
-
-          for (const mod of mods) {
-            server.moduleGraph.invalidateModule(mod);
-            for (const importer of mod.importers) {
-              server.moduleGraph.invalidateModule(importer);
-              if (importer.file) {
-                updates.push({
-                  type: "js-update",
-                  path: importer.url,
-                  acceptedPath: importer.url,
-                  timestamp,
-                });
-              }
-            }
-          }
-
-          if (updates.length > 0) {
-            server.ws.send({ type: "update", updates });
-            return;
-          }
-        }
-
-        // Fallback: full reload if module graph resolution fails.
-        server.ws.send({ type: "full-reload", path: "*" });
-      });
+      server.httpServer?.on("close", () => watcher.close());
     },
   };
 }

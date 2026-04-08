@@ -110,22 +110,24 @@ Running `teleport-build::generate()` produces `types.ts`, `errors.ts`, and `clie
 
 ### Tasks
 
-- [ ] Implement auth middleware in Axum
-  - [ ] Extract `session_id` from cookies
-  - [ ] Extract `Authorization: Bearer <token>` header
-  - [ ] Validate session via `AppState.db` or `AppState.redis`
-  - [ ] Store `AuthedUser` in request extensions
-- [ ] Implement `AuthedUser` as Axum extractor
-  - [ ] Returns 401 if not present (required auth)
-  - [ ] `Option<AuthedUser>` returns `None` if not present (optional auth)
-- [ ] Update proc macro to support `AuthedUser` parameter
-  - [ ] Parse function signatures with `auth: AuthedUser` or `auth: Option<AuthedUser>`
-  - [ ] Generate extractor code in Axum handler
-- [ ] Update client to forward cookies from SvelteKit `getRequestEvent()`
-- [ ] Write integration tests:
-  - [ ] Unauthenticated request to auth-required procedure → 401
-  - [ ] Authenticated request to auth-required procedure → success
-  - [ ] Optional auth returns `None` when not authenticated
+- [x] Implement auth middleware in Axum
+  - [x] Extract `session_id` from cookies (configurable cookie name)
+  - [x] Extract `Authorization: Bearer <token>` header (fallback)
+  - [x] Validate session via closure-based validator with access to AppState
+  - [x] Store `AuthedUser` in request extensions
+- [x] Implement `AuthedUser` as Axum extractor
+  - [x] Returns 401 if not present (required auth)
+  - [x] `Option<AuthedUser>` returns `None` if not present (optional auth)
+- [x] Update proc macro to support `AuthedUser` parameter
+  - [x] Parse function signatures with `auth: AuthedUser` or `auth: Option<AuthedUser>`
+  - [x] Generate extractor code in Axum handler
+- [x] Client forwards cookies via `credentials: "include"` by default
+- [x] Write integration tests:
+  - [x] Unauthenticated request to auth-required procedure → 401
+  - [x] Authenticated request to auth-required procedure → success
+  - [x] Optional auth returns `None` when not authenticated
+  - [x] Cookie-based auth via middleware
+  - [x] Bearer token auth via middleware
 
 ### Deliverable
 
@@ -141,22 +143,17 @@ Procedures can declare `auth: AuthedUser` in their signature and the framework a
 
 ### Tasks
 
-- [ ] Implement `@teleport-rs/vite` plugin
-  - [ ] Watch for changes in generated/ directory
-  - [ ] Trigger full reload on binding changes
-  - [ ] Optional: trigger `cargo build` on Rust file changes
-- [ ] Verify `src/bin/export.rs` integrates with dev workflow
-  - [ ] `cargo watch -x 'run --bin export'` triggers TS regeneration on Rust changes
-  - [ ] Only write files if content changed (avoid unnecessary HMR)
-- [ ] Write SvelteKit integration example:
-  - [ ] `src/lib/api/config.ts` — configure rpc client
-  - [ ] `src/lib/api/index.ts` — barrel exports
-  - [ ] `src/lib/server/data.remote.ts` — example remote functions using generated client
-- [ ] Write dev setup guide (cargo-watch + SvelteKit dev server)
-- [ ] Test the full dev loop:
-  - [ ] Change Rust procedure → cargo build → TS regenerates → SvelteKit HMR
-  - [ ] Verify TypeScript errors show up in IDE
-  - [ ] Verify no-stale-binding issues
+- [x] Implement `@teleport-rs/vite` plugin
+  - [x] Watch for changes in generated/ directory (granular HMR with module graph invalidation)
+  - [x] Fallback to full reload if module graph resolution fails
+  - [x] Optional: `generateOnStart` runs `cargo run --bin export` on dev server start
+  - [x] Watcher cleanup on server close
+- [x] Verify export binary integrates with dev workflow
+  - [x] `cargo watch -x 'run --bin export'` triggers TS regeneration on Rust changes
+  - [x] `write_if_changed()` in teleport-build skips unchanged files (avoids unnecessary HMR)
+- [ ] Write SvelteKit integration example (Phase 6)
+- [ ] Write dev setup guide (Phase 6)
+- [ ] Test the full dev loop end-to-end (Phase 6)
 
 ### Deliverable
 

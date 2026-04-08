@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod error;
 pub mod extractors;
 pub mod procedure;
@@ -7,6 +8,7 @@ pub mod router;
 pub mod private;
 
 // Re-exports for user-facing API.
+pub use auth::AuthConfig;
 pub use error::AppError;
 pub use extractors::{AuthedUser, QsQuery};
 pub use procedure::{HttpMethod, ProcedureRegistration, ProcedureType};

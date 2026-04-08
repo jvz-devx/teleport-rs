@@ -167,12 +167,37 @@ async fn get_my_profile(
     })
 }
 
+#[remote(query)]
+async fn get_optional_profile(
+    _ctx: &AppState,
+    auth: Option<AuthedUser>,
+) -> Result<Option<String>, AppError> {
+    Ok(auth.map(|u| u.email))
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 fn app() -> axum::Router {
     TeleportRouter::new().state(Arc::new(AppState)).mount()
+}
+
+/// Build a router with auth middleware that validates tokens against a static map.
+fn app_with_auth() -> axum::Router {
+    TeleportRouter::new()
+        .state(Arc::new(AppState))
+        .auth("session", |token: String, _state: Arc<AppState>| async move {
+            // Simple token → user mapping for tests.
+            match token.as_str() {
+                "valid-token" => Some(AuthedUser {
+                    id: "user-42".to_owned(),
+                    email: "test@example.com".to_owned(),
+                }),
+                _ => None,
+            }
+        })
+        .mount()
 }
 
 async fn response_json<T: serde::de::DeserializeOwned>(response: http::Response<Body>) -> T {
@@ -464,4 +489,111 @@ async fn qs_flat_params_still_work() {
     assert_eq!(response.status(), StatusCode::OK);
     let user: User = response_json(response).await;
     assert_eq!(user.id, "456");
+}
+
+// ---------------------------------------------------------------------------
+// Auth middleware integration tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn auth_middleware_cookie_valid_token() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getMyProfile")
+                .header("cookie", "session=valid-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let user: User = response_json(response).await;
+    assert_eq!(user.id, "user-42");
+    assert_eq!(user.name, "Authenticated User");
+}
+
+#[tokio::test]
+async fn auth_middleware_bearer_valid_token() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getMyProfile")
+                .header("authorization", "Bearer valid-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let user: User = response_json(response).await;
+    assert_eq!(user.id, "user-42");
+}
+
+#[tokio::test]
+async fn auth_middleware_invalid_token_returns_401() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getMyProfile")
+                .header("cookie", "session=bad-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn auth_middleware_no_token_returns_401() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getMyProfile")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn auth_middleware_optional_auth_with_token() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getOptionalProfile")
+                .header("cookie", "session=valid-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let email: Option<String> = response_json(response).await;
+    assert_eq!(email.as_deref(), Some("test@example.com"));
+}
+
+#[tokio::test]
+async fn auth_middleware_optional_auth_without_token() {
+    let response = app_with_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getOptionalProfile")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let email: Option<String> = response_json(response).await;
+    assert_eq!(email, None);
 }

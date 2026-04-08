@@ -1,12 +1,16 @@
 use std::any::Any;
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
 
+use axum::middleware;
 use axum::response::Json;
 use axum::routing::get;
 use axum::Router;
 use serde::Serialize;
 
+use crate::auth::{auth_middleware, AuthConfig, AuthMiddlewareState};
+use crate::extractors::AuthedUser;
 use crate::procedure::{HttpMethod, ProcedureRegistration};
 
 /// JSON payload returned by the `/__manifest` debug endpoint.
@@ -26,6 +30,7 @@ pub struct ManifestEntry {
 pub struct TeleportRouter<S = ()> {
     state: Option<Arc<S>>,
     manifest: bool,
+    auth: Option<AuthConfig<S>>,
 }
 
 impl<S> TeleportRouter<S>
@@ -37,6 +42,7 @@ where
         Self {
             state: None,
             manifest: cfg!(feature = "debug-manifest"),
+            auth: None,
         }
     }
 
@@ -54,6 +60,35 @@ where
     #[must_use]
     pub const fn manifest(mut self, enabled: bool) -> Self {
         self.manifest = enabled;
+        self
+    }
+
+    /// Configure auth middleware that extracts session tokens from cookies
+    /// or `Authorization: Bearer` headers and validates them into an
+    /// [`AuthedUser`].
+    ///
+    /// The `validator` receives the extracted token and shared app state,
+    /// returning `Some(AuthedUser)` if the token is valid. The middleware
+    /// never blocks requests — procedure-level `AuthedUser` extractors
+    /// handle 401 responses.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// TeleportRouter::new()
+    ///     .state(Arc::new(app_state))
+    ///     .auth("session", |token: String, state: Arc<AppState>| async move {
+    ///         state.db.validate_session(&token).await.ok()
+    ///     })
+    ///     .mount()
+    /// ```
+    #[must_use]
+    pub fn auth<F, Fut>(mut self, cookie_name: &str, validator: F) -> Self
+    where
+        F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Option<AuthedUser>> + Send + 'static,
+    {
+        self.auth = Some(AuthConfig::new(cookie_name, validator));
         self
     }
 
@@ -83,7 +118,21 @@ where
         // Downcast back to the concrete router type and apply state.
         let mut final_router = router.downcast::<Router<Arc<S>>>().map_or_else(
             |_| Router::new(),
-            |typed_router| typed_router.with_state(Arc::clone(&state)),
+            |typed_router| {
+                // Apply auth middleware before collapsing the state, so it
+                // wraps all procedure routes.
+                if let Some(auth) = self.auth {
+                    let mw_state = Arc::new(AuthMiddlewareState {
+                        auth,
+                        app_state: Arc::clone(&state),
+                    });
+                    typed_router
+                        .layer(middleware::from_fn_with_state(mw_state, auth_middleware))
+                        .with_state(Arc::clone(&state))
+                } else {
+                    typed_router.with_state(Arc::clone(&state))
+                }
+            },
         );
 
         if self.manifest {
