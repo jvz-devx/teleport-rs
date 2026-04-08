@@ -6,7 +6,6 @@ export {
   isTransportError,
   mapError,
   rpcUnwrap,
-  unwrap,
 } from "./result";
 export type {
   AppError,

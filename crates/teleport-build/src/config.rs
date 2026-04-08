@@ -29,6 +29,41 @@ impl Config {
             client_import_path: None,
         }
     }
+
+    /// Include or exclude the debug manifest endpoint.
+    #[must_use]
+    pub const fn with_manifest(mut self, include: bool) -> Self {
+        self.include_manifest = include;
+        self
+    }
+
+    /// Set a URL prefix for all RPC routes.
+    #[must_use]
+    pub fn with_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.route_prefix = prefix.into();
+        self
+    }
+
+    /// Override the import path for the `rpc` function.
+    #[must_use]
+    pub fn with_client_import(mut self, path: impl Into<String>) -> Self {
+        self.client_import_path = Some(path.into());
+        self
+    }
+
+    /// Set the namespace derivation style.
+    #[must_use]
+    pub const fn with_namespace_style(mut self, style: NamespaceStyle) -> Self {
+        self.namespace_style = style;
+        self
+    }
+
+    /// Set the naming convention for generated TypeScript identifiers.
+    #[must_use]
+    pub const fn with_naming(mut self, naming: Naming) -> Self {
+        self.naming = naming;
+        self
+    }
 }
 
 /// Strategy for deriving procedure namespaces.

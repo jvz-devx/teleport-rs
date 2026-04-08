@@ -16,15 +16,6 @@ export function isAppError<T, E>(
 }
 
 /**
- * Unwrap a successful result or throw.
- *
- * @deprecated Use `rpcUnwrap()` instead, which throws typed errors.
- */
-export function unwrap<T, E>(result: RpcResult<T, E>): T {
-  return rpcUnwrap(result);
-}
-
-/**
  * Unwrap a successful result or throw a typed error.
  *
  * - Transport errors throw `TransportFailure`

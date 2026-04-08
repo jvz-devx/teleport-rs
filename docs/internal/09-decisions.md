@@ -6,7 +6,7 @@ This document records all design decisions made during planning, including alter
 
 ## 1. Procedure Types: `query` / `command` / `form`
 
-**Decision:** Use SvelteKit-style procedure type annotations.
+**Decision:** Use semantic procedure type annotations inspired by CQRS patterns.
 
 ```rust
 #[remote(query)]
@@ -16,24 +16,24 @@ This document records all design decisions made during planning, including alter
 
 **Alternatives considered:**
 
-- A: `#[remote(query)]` / `#[remote(command)]` / `#[remote(form)]` — explicit, mirrors SvelteKit
+- A: `#[remote(query)]` / `#[remote(command)]` / `#[remote(form)]` — explicit, semantic
 - B: `#[remote(GET)]` / `#[remote(POST)]` — HTTP methods, loses semantic meaning
 - C: `#[remote]` with inference — too ambiguous, can't reliably infer intent from signature
 
-**Rationale:** Explicit is better than implicit. SvelteKit uses query/command/form and developers familiar with SvelteKit will immediately understand the semantics. `form` specifically means "progressive enhancement form submission" — this distinction matters for DX.
+**Rationale:** Explicit is better than implicit. `query` = read, `command` = write, `form` = form submission. These map cleanly to CQRS concepts and HTTP semantics (GET/POST). `form` is identical to `command` at the HTTP level (POST + JSON body), but semantically represents a form action — frameworks like SvelteKit can use this for progressive enhancement, while others treat it as a regular POST endpoint.
 
 ---
 
-## 2. Client Boundary: SvelteKit Only
+## 2. Client Boundary: BFF Pattern
 
-**Decision:** The browser never calls Rust directly. All calls go through SvelteKit remote functions.
+**Decision:** The browser never calls Rust directly. All calls go through a Backend-for-Frontend (BFF) layer — SvelteKit, Next.js, Remix, or any server-side framework.
 
 **Rationale:**
 
-- Security: `.remote.ts` files are server-only by SvelteKit convention. No risk of leaking server code to client.
-- Flexibility: SvelteKit BFF can validate (Zod), transform, cache, and handle auth before calling Rust.
-- Colocation: Data loading is next to the component that uses it, not scattered across `+page.server.ts` files.
-- Progressive enhancement: form procedures work without JS via SvelteKit's built-in enhancement.
+- Security: The BFF layer keeps server-only code out of the browser bundle. In SvelteKit this is `.remote.ts` files; in Next.js, Server Actions or API routes; in Remix, loaders/actions.
+- Flexibility: The BFF can validate (Zod), transform, cache, and handle auth before calling Rust.
+- Colocation: Data loading lives next to the component that uses it, not in a separate API layer.
+- Progressive enhancement: `form` procedures can leverage framework-specific progressive enhancement (e.g., SvelteKit's built-in form handling) where available.
 
 ---
 
@@ -128,20 +128,20 @@ async fn login(...)    // → /rpc/auth.login
 
 ## 8. Auth: Auto-Forward Cookies + Explicit Override
 
-**Decision:** SvelteKit BFF forwards cookies to Rust by default. Optional `Authorization` header override for specific calls.
+**Decision:** The BFF layer forwards cookies to Rust by default. Optional `Authorization` header override for specific calls.
 
-**Rationale:** The default case (same-origin BFF → Rust) should "just work" with cookies. The explicit override exists for API keys, service-to-service calls, and cross-origin scenarios. This matches the SvelteKit remote function model where cookies are available via `getRequestEvent()`.
+**Rationale:** The default case (same-origin BFF → Rust) should "just work" with cookies. The explicit override exists for API keys, service-to-service calls, and cross-origin scenarios. In SvelteKit, cookies are available via `getRequestEvent()`; in Next.js, via `cookies()` from `next/headers`; other frameworks have equivalent mechanisms.
 
 ---
 
 ## 9. Serialization: JSON Only
 
-**Decision:** All data between SvelteKit and Rust is JSON. No binary serialization.
+**Decision:** All data between the BFF and Rust is JSON. No binary serialization.
 
 **Rationale:**
 
-- The hot path is Browser → SvelteKit, which is always JSON anyway.
-- SvelteKit → Rust is localhost, where JSON is sub-millisecond.
+- The hot path is Browser → BFF, which is always JSON anyway.
+- BFF → Rust is localhost, where JSON is sub-millisecond.
 - JSON is debuggable in terminal, devtools, and logs.
 - Binary serialization doubles testing surface and adds dependencies.
 - YAGNI — add binary later if measured bottleneck exists.
@@ -183,7 +183,7 @@ async fn login(...)    // → /rpc/auth.login
 
 ## 13. Validation: Both Sides
 
-**Decision:** SvelteKit remote functions validate with Zod (UX). Rust validates with serde + business logic (security).
+**Decision:** The BFF layer validates with Zod (UX). Rust validates with serde + business logic (security).
 
 **Rationale:** Defense in depth. Zod gives instant feedback and nice error messages before the network call. Rust gives authoritative validation that can't be bypassed. Neither alone is sufficient — client-side validation can be skipped, server-side validation gives poor UX.
 

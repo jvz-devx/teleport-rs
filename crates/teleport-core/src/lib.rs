@@ -20,14 +20,14 @@ impl HttpMethod {
     }
 }
 
-/// Semantic procedure type, mirroring `SvelteKit` conventions.
+/// Semantic procedure type inspired by CQRS patterns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcedureType {
     /// Read-only data fetching (GET).
     Query,
     /// Mutations and actions (POST with JSON body).
     Command,
-    /// Form submissions with progressive enhancement (POST).
+    /// Form submissions (POST with JSON body, same as command at the HTTP level).
     Form,
 }
 

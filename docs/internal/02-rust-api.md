@@ -35,11 +35,11 @@ async fn create_post(ctx: &AppState, form: CreatePostForm) -> Result<Post, AppEr
 
 ### Procedure Types
 
-| Type      | HTTP Method | Input Location            | Use Case                                      |
-| --------- | ----------- | ------------------------- | --------------------------------------------- |
-| `query`   | GET         | Query params              | Read-only data fetching                       |
-| `command` | POST        | JSON body                 | Mutations, actions                            |
-| `form`    | POST        | JSON body (from FormData) | Form submissions with progressive enhancement |
+| Type      | HTTP Method | Input Location | Use Case                                                                                                    |
+| --------- | ----------- | -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `query`   | GET         | Query params   | Read-only data fetching                                                                                     |
+| `command` | POST        | JSON body      | Mutations, actions                                                                                          |
+| `form`    | POST        | JSON body      | Form submissions. Semantically represents a form action. Frameworks like SvelteKit can use this for progressive enhancement; others treat it as a regular POST endpoint. |
 
 ### Function Signature Rules
 
@@ -58,7 +58,7 @@ async fn name(ctx: &AppState) -> Result<OutputType, AppError<ErrorType>> {}
 #[remote(command)]
 async fn name(ctx: &AppState, input: InputType) -> Result<OutputType, AppError<ErrorType>> {}
 
-// form: takes a form data struct
+// form: same as command but semantically represents a form action
 #[remote(form)]
 async fn name(ctx: &AppState, form: FormType) -> Result<OutputType, AppError<ErrorType>> {}
 ```
