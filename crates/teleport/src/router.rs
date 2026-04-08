@@ -10,8 +10,12 @@ use axum::Router;
 use serde::Serialize;
 
 use crate::auth::{auth_middleware, AuthConfig, AuthMiddlewareState};
-use crate::extractors::AuthedUser;
 use crate::procedure::{HttpMethod, ProcedureRegistration};
+
+/// Type-erased closure that applies the auth middleware layer to a router.
+/// Captures the user type `U` at `.auth()` call time, so `TeleportRouter`
+/// doesn't need `U` as a type parameter.
+type AuthLayerFn<S> = dyn FnOnce(Router<Arc<S>>, Arc<S>) -> Router<Arc<S>> + Send;
 
 /// JSON payload returned by the `/__manifest` debug endpoint.
 #[derive(Debug, Clone, Serialize)]
@@ -48,7 +52,7 @@ type RouteHook<S> =
 pub struct TeleportRouter<S = (), StateMarker = NoState> {
     state: Option<Arc<S>>,
     manifest: bool,
-    auth: Option<AuthConfig<S>>,
+    auth_layer: Option<Box<AuthLayerFn<S>>>,
     route_hook: Option<Arc<RouteHook<S>>>,
     _marker: PhantomData<StateMarker>,
 }
@@ -62,7 +66,7 @@ where
         Self {
             state: None,
             manifest: cfg!(feature = "debug-manifest"),
-            auth: None,
+            auth_layer: None,
             route_hook: None,
             _marker: PhantomData,
         }
@@ -77,7 +81,7 @@ where
         TeleportRouter {
             state: Some(state),
             manifest: self.manifest,
-            auth: self.auth,
+            auth_layer: self.auth_layer,
             route_hook: self.route_hook,
             _marker: PhantomData,
         }
@@ -89,13 +93,14 @@ where
     S: Clone + Send + Sync + 'static,
 {
     /// Configure auth middleware that extracts session tokens from cookies
-    /// or `Authorization: Bearer` headers and validates them into an
-    /// [`AuthedUser`].
+    /// or `Authorization: Bearer` headers and validates them into a user
+    /// value of type `U`.
     ///
     /// The `validator` receives the extracted token and shared app state,
-    /// returning `Some(AuthedUser)` if the token is valid. The middleware
-    /// never blocks requests — procedure-level `AuthedUser` extractors
-    /// handle 401 responses.
+    /// returning `Some(U)` if the token is valid. The resolved user is
+    /// inserted into request extensions, so procedure-level extractors
+    /// can retrieve it via `FromRequestParts`. The middleware never blocks
+    /// requests — extractors handle 401 responses.
     ///
     /// # Example
     ///
@@ -108,12 +113,21 @@ where
     ///     .mount()
     /// ```
     #[must_use]
-    pub fn auth<F, Fut>(mut self, cookie_name: &str, validator: F) -> Self
+    pub fn auth<U, F, Fut>(mut self, cookie_name: &str, validator: F) -> Self
     where
+        U: Clone + Send + Sync + 'static,
         F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Option<AuthedUser>> + Send + 'static,
+        Fut: Future<Output = Option<U>> + Send + 'static,
     {
-        self.auth = Some(AuthConfig::new(cookie_name, validator));
+        let cookie_name = cookie_name.to_owned();
+        self.auth_layer = Some(Box::new(move |router: Router<Arc<S>>, state: Arc<S>| {
+            let config = AuthConfig::new(&cookie_name, validator);
+            let mw_state = Arc::new(AuthMiddlewareState {
+                auth: config,
+                app_state: state,
+            });
+            router.layer(middleware::from_fn_with_state(mw_state, auth_middleware::<S, U>))
+        }));
         self
     }
 
@@ -156,7 +170,7 @@ where
     /// called to create a `MethodRouter`, which is then (optionally) passed
     /// through the [`on_route`](Self::on_route) hook before being added to
     /// the router.
-    #[allow(clippy::print_stderr)]
+    #[allow(clippy::panic)]
     pub fn mount(self) -> Router {
         // SAFETY: state is guaranteed to be `Some` by the typestate — only
         // `WithState` has this method, and transitioning to `WithState`
@@ -169,15 +183,15 @@ where
             let path = reg.path();
             let method_router_any = (reg.mount_fn)();
 
-            let Some(method_router) =
-                method_router_any.downcast::<MethodRouter<Arc<S>>>().ok()
-            else {
-                eprintln!(
-                    "teleport-rs warning: state type mismatch for procedure '{}' — skipping",
-                    reg.name()
-                );
-                continue;
-            };
+            let method_router = method_router_any
+                .downcast::<MethodRouter<Arc<S>>>()
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "teleport-rs: state type mismatch for procedure '{}'. \
+                         All #[remote] procedures must use the same state type as TeleportRouter.",
+                        reg.name()
+                    )
+                });
 
             let method_router = match self.route_hook {
                 Some(ref hook) => hook(&path, *method_router),
@@ -187,17 +201,13 @@ where
             router = router.route(&path, method_router);
         }
 
-        let mut final_router = if let Some(auth) = self.auth {
-            let mw_state = Arc::new(AuthMiddlewareState {
-                auth,
-                app_state: Arc::clone(&state),
-            });
-            router
-                .layer(middleware::from_fn_with_state(mw_state, auth_middleware))
-                .with_state(Arc::clone(&state))
+        let router = if let Some(apply_auth) = self.auth_layer {
+            (apply_auth)(router, Arc::clone(&state))
         } else {
-            router.with_state(Arc::clone(&state))
+            router
         };
+
+        let mut final_router = router.with_state(Arc::clone(&state));
 
         if self.manifest {
             let manifest = build_manifest();

@@ -46,10 +46,12 @@ pub fn export_from_inventory(config: &Config) -> Result<(), GenerateError> {
     let mut procedures = Vec::new();
 
     for reg in inventory::iter::<teleport_core::ProcedureRegistration> {
+        let name = reg.name();
+        let path = format!("{}/{}", config.route_prefix, name);
         let info = ProcedureInfo {
-            name: reg.name(),
+            name,
             method: reg.method,
-            path: reg.path(),
+            path,
             doc: reg.doc.to_owned(),
             input_type: (reg.input_type)(&mut types),
             output_type: (reg.output_type)(&mut types),

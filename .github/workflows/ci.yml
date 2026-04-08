@@ -60,5 +60,8 @@ jobs:
       - name: Type check client
         run: npx tsc --noEmit -p packages/client/tsconfig.json
 
+      - name: Test client
+        run: npm test --workspace=packages/client
+
       - name: Type check vite
         run: npx tsc --noEmit -p packages/vite/tsconfig.json

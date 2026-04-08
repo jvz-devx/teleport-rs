@@ -6,36 +6,34 @@ use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 
-use crate::extractors::AuthedUser;
-
-type ValidatorFn<S> = dyn Fn(String, Arc<S>) -> Pin<Box<dyn Future<Output = Option<AuthedUser>> + Send>>
-    + Send
-    + Sync;
+type ValidatorFn<S, U> =
+    dyn Fn(String, Arc<S>) -> Pin<Box<dyn Future<Output = Option<U>> + Send>> + Send + Sync;
 
 /// Configuration for the auth middleware.
 ///
 /// Extracts a session token from cookies or the `Authorization: Bearer` header,
-/// then calls a user-provided validator to resolve it into an [`AuthedUser`].
+/// then calls a user-provided validator to resolve it into a user value of type `U`.
 /// If validation succeeds, the user is inserted into request extensions.
 /// The request always proceeds — procedure-level extractors handle 401 responses.
-pub struct AuthConfig<S> {
+pub struct AuthConfig<S, U> {
     pub(crate) cookie_name: String,
-    pub(crate) validator: Arc<ValidatorFn<S>>,
+    pub(crate) validator: Arc<ValidatorFn<S, U>>,
 }
 
-impl<S> AuthConfig<S>
+impl<S, U> AuthConfig<S, U>
 where
     S: Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
 {
     /// Create a new auth configuration.
     ///
     /// - `cookie_name`: the name of the session cookie to check first.
     /// - `validator`: an async function that receives a token string and shared
-    ///   state, returning `Some(AuthedUser)` if the token is valid.
+    ///   state, returning `Some(U)` if the token is valid.
     pub fn new<F, Fut>(cookie_name: &str, validator: F) -> Self
     where
         F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Option<AuthedUser>> + Send + 'static,
+        Fut: Future<Output = Option<U>> + Send + 'static,
     {
         Self {
             cookie_name: cookie_name.to_owned(),
@@ -44,12 +42,16 @@ where
     }
 }
 
-/// Axum middleware that extracts a token and validates it into an [`AuthedUser`].
-pub(crate) async fn auth_middleware<S: Send + Sync + 'static>(
-    State(config): State<Arc<AuthMiddlewareState<S>>>,
+/// Axum middleware that extracts a token and validates it into a user of type `U`.
+pub(crate) async fn auth_middleware<S, U>(
+    State(config): State<Arc<AuthMiddlewareState<S, U>>>,
     mut request: Request,
     next: Next,
-) -> Response {
+) -> Response
+where
+    S: Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
     if let Some(token) = extract_token(&request, &config.auth.cookie_name)
         && let Some(user) = (config.auth.validator)(token, Arc::clone(&config.app_state)).await
     {
@@ -60,8 +62,8 @@ pub(crate) async fn auth_middleware<S: Send + Sync + 'static>(
 
 /// Combined state for the auth middleware layer, holding both the auth config
 /// and the application state needed by the validator.
-pub(crate) struct AuthMiddlewareState<S> {
-    pub(crate) auth: AuthConfig<S>,
+pub(crate) struct AuthMiddlewareState<S, U> {
+    pub(crate) auth: AuthConfig<S, U>,
     pub(crate) app_state: Arc<S>,
 }
 

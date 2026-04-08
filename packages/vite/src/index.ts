@@ -13,12 +13,13 @@ export interface TeleportViteOptions {
   bindingsPath: string;
 
   /**
-   * When `true`, runs `cargo run --bin export` at dev-server start
-   * to ensure bindings are up-to-date before the first page load.
+   * When `true`, runs `cargo run` at dev-server start to ensure
+   * bindings are up-to-date before the first page load. Pass a string
+   * to override the command (e.g. `"cargo run --bin export"`).
    *
    * @default false
    */
-  generateOnStart?: boolean;
+  generateOnStart?: boolean | string;
 }
 
 /**
@@ -32,7 +33,11 @@ export function teleportVite(options: TeleportViteOptions): Plugin {
     async buildStart() {
       if (options.generateOnStart) {
         const { execSync } = await import("node:child_process");
-        execSync("cargo run --bin export", { stdio: "inherit" });
+        const cmd =
+          typeof options.generateOnStart === "string"
+            ? options.generateOnStart
+            : "cargo run";
+        execSync(cmd, { stdio: "inherit" });
       }
     },
 
@@ -44,7 +49,7 @@ export function teleportVite(options: TeleportViteOptions): Plugin {
         server.config.logger.warn(
           "[teleport-rs] Generated bindings directory not found: " +
             bindingsDir +
-            '\n  Run "cargo run --bin export" to generate TypeScript bindings.',
+            '\n  Run "cargo run" to generate TypeScript bindings.',
         );
       } else {
         const tsFiles = readdirSync(bindingsDir).filter((f) =>
@@ -54,7 +59,7 @@ export function teleportVite(options: TeleportViteOptions): Plugin {
           server.config.logger.warn(
             "[teleport-rs] No .ts files found in " +
               bindingsDir +
-              '\n  Run "cargo run --bin export" to generate TypeScript bindings.',
+              '\n  Run "cargo run" to generate TypeScript bindings.',
           );
         }
       }

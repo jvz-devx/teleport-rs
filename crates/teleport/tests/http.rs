@@ -8,7 +8,7 @@ use http::{Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
 
-use teleport::{remote, AppError, AuthedUser, TeleportRouter};
+use teleport::{remote, AppError, AuthedUser, TeleportRouter, TeleportUser};
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -177,6 +177,47 @@ async fn get_optional_profile(
 }
 
 // ---------------------------------------------------------------------------
+// Custom user type for generic auth tests
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+struct CustomUser {
+    user_id: i64,
+    role: String,
+}
+
+impl TeleportUser for CustomUser {}
+
+impl<S> axum::extract::FromRequestParts<S> for CustomUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or(AppError::Unauthorized)
+    }
+}
+
+#[remote(query)]
+async fn get_custom_profile(
+    _ctx: &AppState,
+    #[auth] user: CustomUser,
+) -> Result<User, AppError<UserError>> {
+    Ok(User {
+        id: user.user_id.to_string(),
+        name: user.role,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -194,6 +235,22 @@ fn app_with_auth() -> axum::Router {
                 "valid-token" => Some(AuthedUser {
                     id: "user-42".to_owned(),
                     email: "test@example.com".to_owned(),
+                }),
+                _ => None,
+            }
+        })
+        .mount()
+}
+
+/// Build a router with auth middleware returning a custom user type.
+fn app_with_custom_auth() -> axum::Router {
+    TeleportRouter::new()
+        .state(Arc::new(AppState))
+        .auth("session", |token: String, _state: Arc<AppState>| async move {
+            match token.as_str() {
+                "admin-token" => Some(CustomUser {
+                    user_id: 99,
+                    role: "admin".to_owned(),
                 }),
                 _ => None,
             }
@@ -399,6 +456,26 @@ async fn form_procedure_accepts_post_json() {
     let user: User = response_json(response).await;
     assert_eq!(user.id, "feedback-1");
     assert_eq!(user.name, "Feedback User");
+}
+
+#[tokio::test]
+async fn form_procedure_accepts_urlencoded() {
+    let response = app()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/rpc/http.submitFeedback")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("name=Form+User"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let user: User = response_json(response).await;
+    assert_eq!(user.id, "feedback-1");
+    assert_eq!(user.name, "Form User");
 }
 
 // ---------------------------------------------------------------------------
@@ -659,4 +736,76 @@ async fn on_route_applies_middleware_to_matching_routes() {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().get("x-custom").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Custom user type auth middleware tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn custom_auth_valid_token() {
+    let response = app_with_custom_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getCustomProfile")
+                .header("cookie", "session=admin-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let user: User = response_json(response).await;
+    assert_eq!(user.id, "99");
+    assert_eq!(user.name, "admin");
+}
+
+#[tokio::test]
+async fn custom_auth_invalid_token_returns_401() {
+    let response = app_with_custom_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getCustomProfile")
+                .header("cookie", "session=bad-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn custom_auth_no_token_returns_401() {
+    let response = app_with_custom_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getCustomProfile")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn custom_auth_bearer_token() {
+    let response = app_with_custom_auth()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getCustomProfile")
+                .header("authorization", "Bearer admin-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let user: User = response_json(response).await;
+    assert_eq!(user.id, "99");
 }

@@ -454,8 +454,11 @@ fn gen_handler(
         ProcType::Query => quote! {
             teleport::QsQuery(input): teleport::QsQuery<#input>
         },
-        ProcType::Command | ProcType::Form => quote! {
+        ProcType::Command => quote! {
             axum::Json(input): axum::Json<#input>
+        },
+        ProcType::Form => quote! {
+            teleport::FormOrJson(input): teleport::FormOrJson<#input>
         },
     });
 

@@ -1,6 +1,6 @@
-use axum::extract::FromRequestParts;
-use axum::extract::OptionalFromRequestParts;
+use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequestParts, Request};
 use axum::http::request::Parts;
+use axum::{Form, Json};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +62,48 @@ where
 pub trait TeleportUser: Clone + Send + Sync + 'static {}
 
 impl TeleportUser for AuthedUser {}
+
+/// Extractor that accepts both JSON and URL-encoded form data.
+///
+/// Checks `Content-Type` to decide how to deserialize the request body:
+/// - `application/x-www-form-urlencoded` → form deserialization
+/// - anything else (including `application/json`) → JSON deserialization
+///
+/// This enables progressive enhancement: HTML forms submit url-encoded data
+/// natively, while JS clients can send JSON.
+pub struct FormOrJson<T>(pub T);
+
+impl<S, T> FromRequest<S> for FormOrJson<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + 'static,
+{
+    type Rejection = AppError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let is_form = req
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|ct| ct.starts_with("application/x-www-form-urlencoded"));
+
+        if is_form {
+            let Form(data) = Form::<T>::from_request(req, state)
+                .await
+                .map_err(|e| AppError::BadRequest {
+                    message: e.to_string(),
+                })?;
+            Ok(Self(data))
+        } else {
+            let Json(data) = Json::<T>::from_request(req, state)
+                .await
+                .map_err(|e| AppError::BadRequest {
+                    message: e.to_string(),
+                })?;
+            Ok(Self(data))
+        }
+    }
+}
 
 /// Query parameter extractor using `serde_qs` for bracket-notation support.
 ///

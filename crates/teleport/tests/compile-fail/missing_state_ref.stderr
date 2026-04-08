@@ -1,0 +1,13 @@
+error: first parameter must be a reference to the state type (e.g. `ctx: &AppState`)
+ --> tests/compile-fail/missing_state_ref.rs:7:22
+  |
+7 | async fn no_ref(ctx: AppState) -> Result<String, AppError> {
+  |                      ^^^^^^^^
+
+warning: unused import: `AppError`
+ --> tests/compile-fail/missing_state_ref.rs:1:24
+  |
+1 | use teleport::{remote, AppError};
+  |                        ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

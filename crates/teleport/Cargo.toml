@@ -24,6 +24,7 @@ serde_json = { workspace = true }
 teleport-build = { path = "../teleport-build" }
 specta-typescript = { workspace = true }
 tempfile = "3"
+trybuild = "1"
 tower = { version = "0.5", features = ["util"] }
 http = { workspace = true }
 

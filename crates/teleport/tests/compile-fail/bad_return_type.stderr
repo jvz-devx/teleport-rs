@@ -1,0 +1,5 @@
+error: return type must be `Result<T, AppError<E>>`
+ --> tests/compile-fail/bad_return_type.rs:7:38
+  |
+7 | async fn bad_ret(_ctx: &AppState) -> String {
+  |                                      ^^^^^^
