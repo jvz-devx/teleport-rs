@@ -39,7 +39,7 @@ async fn create_post(ctx: &AppState, form: CreatePostForm) -> Result<Post, AppEr
 | --------- | ----------- | -------------- | ----------------------------------------------------------------------------------------------------------- |
 | `query`   | GET         | Query params   | Read-only data fetching                                                                                     |
 | `command` | POST        | JSON body      | Mutations, actions                                                                                          |
-| `form`    | POST        | JSON body      | Form submissions. Semantically represents a form action. Frameworks like SvelteKit can use this for progressive enhancement; others treat it as a regular POST endpoint. |
+| `form`    | POST        | Form-urlencoded or JSON | Form submissions with progressive enhancement. Uses the `FormOrJson` extractor: HTML forms submit url-encoded data natively, while JS clients can send JSON. |
 
 ### Function Signature Rules
 
@@ -58,7 +58,7 @@ async fn name(ctx: &AppState) -> Result<OutputType, AppError<ErrorType>> {}
 #[remote(command)]
 async fn name(ctx: &AppState, input: InputType) -> Result<OutputType, AppError<ErrorType>> {}
 
-// form: same as command but semantically represents a form action
+// form: accepts both form-urlencoded and JSON via FormOrJson extractor
 #[remote(form)]
 async fn name(ctx: &AppState, form: FormType) -> Result<OutputType, AppError<ErrorType>> {}
 ```
@@ -132,7 +132,7 @@ async fn get_public_profile(ctx: &AppState, auth: Option<AuthedUser>, id: String
 }
 ```
 
-The `#[remote]` macro detects `AuthedUser` or `Option<AuthedUser>` in the parameter list and generates the appropriate Axum `FromRequestParts` extraction. `AppState` stays clean — no per-request mutation needed. See `05-auth.md` for details.
+The `#[remote]` macro detects auth parameters in the parameter list — either `AuthedUser`/`Option<AuthedUser>` by convention, or any type annotated with `#[auth]`/`Option<T>` with `#[auth]` — and generates the appropriate Axum extraction. `AppState` stays clean — no per-request mutation needed. See `05-auth.md` for details.
 
 ## Router Generation
 
@@ -141,7 +141,7 @@ The `#[remote]` macro generates an Axum route for each procedure. At runtime, `T
 1. An Axum `Router` with all `/rpc/*` routes
 2. A route manifest (for debugging)
 
-TypeScript generation is handled separately by the `cargo run --bin export` binary (see `06-build-pipeline.md`).
+TypeScript generation is handled separately by running `cargo run` with export support (see `06-build-pipeline.md`).
 
 ### Registration Mechanism
 

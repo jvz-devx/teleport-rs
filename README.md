@@ -40,9 +40,9 @@ if (result.ok) {
 
 - `#[remote(query)]` — GET endpoints, input from query params
 - `#[remote(command)]` — POST endpoints, JSON body
-- `#[remote(form)]` — POST endpoints, form submissions
+- `#[remote(form)]` — POST endpoints, accepts both form-urlencoded and JSON
 - Typed errors with `AppError<T>` flowing to TypeScript
-- Cookie-based auth with `AuthedUser` extractor
+- Generic auth with custom user types via `#[auth]` attribute
 - Vite plugin with granular HMR
 - Single binary — server and export in one
 

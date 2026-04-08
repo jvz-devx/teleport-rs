@@ -17,8 +17,8 @@ There should be **zero manual steps** in the dev loop.
 │  Developer Workflow                                       │
 │                                                           │
 │  1. Edit Rust procedure (add/modify #[remote])            │
-│  2. cargo-watch detects change, runs `cargo run --bin     │
-│     export` automatically                                 │
+│  2. cargo-watch detects change, runs `cargo run`          │
+│     automatically                                         │
 │  3. Export binary collects procedures via                  │
 │     inventory::collect and generates TS files              │
 │  4. TS files written to ../frontend/src/lib/api/generated/│
@@ -30,34 +30,27 @@ There should be **zero manual steps** in the dev loop.
 └──────────────────────────────────────────────────────────┘
 ```
 
-## Rust Side: Export Binary
+## Rust Side: Export
 
-TypeScript generation is handled by a dedicated binary (`src/bin/export.rs`), not `build.rs`. This is because `inventory::collect` is a runtime operation — it relies on linker-generated data that is only available when the compiled binary actually runs, not during build scripts.
+TypeScript generation runs as part of the main binary (single-binary architecture), not `build.rs`. This is because `inventory::collect` is a runtime operation — it relies on linker-generated data that is only available when the compiled binary actually runs, not during build scripts.
+
+Export is triggered by `TeleportRouter::<S>::export(&config)` at startup:
 
 ```rust
-// src/bin/export.rs
-
-use std::path::PathBuf;
+use teleport::{ExportConfig, TeleportRouter};
 
 fn main() {
-    let out_dir = std::env::var("TELEPORT_OUTPUT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("../frontend/src/lib/api/generated"));
+    TeleportRouter::<AppState>::export(
+        &ExportConfig::new("frontend/src/lib/api/generated"),
+    ).expect("failed to export TS bindings");
 
-    teleport_build::generate(teleport_build::Config {
-        output_dir: out_dir,
-        namespace_style: teleport_build::NamespaceStyle::ModulePath,
-        naming: teleport_build::Naming {
-            case: teleport_build::NamingCase::CamelCase,
-            ..Default::default()
-        },
-        include_manifest: cfg!(debug_assertions),
-        route_prefix: "/rpc".to_string(),
-    }).expect("Failed to generate teleport-rs bindings");
+    // ... then start server
 }
 ```
 
-### When `cargo run --bin export` Runs:
+The `route_prefix` in `ExportConfig` (default `"/rpc"`) is used when generating procedure paths in the TypeScript client.
+
+### When export runs:
 
 1. The export binary executes
 2. `inventory::collect` gathers all `#[remote]` procedures at runtime
@@ -112,8 +105,9 @@ export interface TeleportViteOptions {
   bindingsPath: string;
   /** Path to write processed bindings in the SvelteKit project */
   outputPath: string;
-  /** Whether to run generation on startup */
-  generateOnStart: boolean;
+  /** Whether to run generation on startup. Pass `true` for the default
+   *  command (`"cargo run"`), or a custom command string. */
+  generateOnStart?: boolean | string;
 }
 
 export function teleportVite(options: TeleportViteOptions): Plugin {
@@ -122,8 +116,12 @@ export function teleportVite(options: TeleportViteOptions): Plugin {
 
     async buildStart() {
       if (options.generateOnStart) {
-        // Trigger cargo build to regenerate bindings
-        // (or just watch for file changes)
+        const { execSync } = await import("node:child_process");
+        const cmd =
+          typeof options.generateOnStart === "string"
+            ? options.generateOnStart
+            : "cargo run";
+        execSync(cmd, { stdio: "inherit" });
       }
     },
 
@@ -221,7 +219,7 @@ export default {
 │  │ struct User { id, name, email } │  │
 │  └─────────────────────────────────┘  │
 └──────────┬───────────────────────────┘
-           │ cargo run --bin export
+           │ cargo run
            ▼
 ┌──────────────────────────────────────┐
 │  inventory::collect!(Procedure…)      │
@@ -268,9 +266,9 @@ export default {
 ## Production Build
 
 ```
-1. CI pipeline runs cargo build --release (compiles server + export binary)
-2. cargo run --bin export --release generates fresh TS bindings
-3. Bindings written to ../frontend/src/lib/api/generated/
+1. CI pipeline runs cargo build --release (compiles single binary)
+2. cargo run --release generates TS bindings (export runs at startup)
+3. Bindings written to the configured output directory
 4. npm run build (SvelteKit) uses the fresh bindings
 5. TypeScript compiler validates all types match
 6. If types mismatch, CI fails
@@ -299,12 +297,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build Rust server
-        run: cargo build --release
-        working-directory: rust-server
-
-      - name: Generate TypeScript bindings
-        run: cargo run --bin export --release
+      - name: Build and generate TypeScript bindings
+        run: cargo run --release
         working-directory: rust-server
 
       - name: Install frontend deps
@@ -329,9 +323,7 @@ my-project/
 ├── rust-server/
 │   ├── Cargo.toml
 │   ├── src/
-│   │   ├── bin/
-│   │   │   └── export.rs           # ← runs teleport_build::generate()
-│   │   ├── main.rs
+│   │   ├── main.rs                 # ← calls TeleportRouter::export() then starts server
 │   │   ├── state.rs
 │   │   ├── auth.rs
 │   │   └── api/
@@ -366,15 +358,15 @@ my-project/
 
 ## Configuring Generated Output Path
 
-The export binary reads `TELEPORT_OUTPUT_DIR` as an environment variable override:
+The output directory is set via `ExportConfig::new(path)`:
 
-```bash
-# Default: ../frontend/src/lib/api/generated (relative to Cargo.toml)
-cargo run --bin export
-
-# Override for CI or custom setups
-TELEPORT_OUTPUT_DIR=/path/to/frontend/src/lib/api/generated cargo run --bin export
+```rust
+TeleportRouter::<AppState>::export(
+    &ExportConfig::new("frontend/src/lib/api/generated"),
+).expect("failed to export");
 ```
+
+The `route_prefix` (default `"/rpc"`) can be customized with `ExportConfig::new(...).with_prefix("/api")`.
 
 ## `@teleport-rs/client` Package
 
@@ -428,7 +420,7 @@ For developers not using Vite (e.g., other editors), `cargo-watch` can trigger r
 
 ```bash
 # Terminal 1: Watch Rust changes and regenerate bindings
-cargo watch -x 'run --bin export'
+cargo watch -x run
 
 # Terminal 2: SvelteKit dev server (picks up generated file changes automatically)
 npm run dev

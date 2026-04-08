@@ -33,6 +33,8 @@ Procedure Handler
 ```rust
 use axum::{middleware, extract::State, http::Request, body::Body};
 
+// The auth middleware is generic over the user type U.
+// AuthedUser is the built-in default, but you can use any custom type.
 #[derive(Debug, Clone)]
 pub struct AuthedUser {
     pub id: String,
@@ -49,7 +51,7 @@ pub enum UserRole {
 
 /// Auth middleware that runs before every teleport-rs procedure.
 /// Extracts session from cookie or Authorization header.
-/// Sets current_user on AppState (per-request clone).
+/// Stores the validated user (of generic type U) in request extensions.
 pub async fn auth_middleware(
     mut req: Request<Body>,
     next: middleware::Next<Body>,

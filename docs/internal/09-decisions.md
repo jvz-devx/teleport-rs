@@ -20,7 +20,7 @@ This document records all design decisions made during planning, including alter
 - B: `#[remote(GET)]` / `#[remote(POST)]` — HTTP methods, loses semantic meaning
 - C: `#[remote]` with inference — too ambiguous, can't reliably infer intent from signature
 
-**Rationale:** Explicit is better than implicit. `query` = read, `command` = write, `form` = form submission. These map cleanly to CQRS concepts and HTTP semantics (GET/POST). `form` is identical to `command` at the HTTP level (POST + JSON body), but semantically represents a form action — frameworks like SvelteKit can use this for progressive enhancement, while others treat it as a regular POST endpoint.
+**Rationale:** Explicit is better than implicit. `query` = read, `command` = write, `form` = form submission. These map cleanly to CQRS concepts and HTTP semantics (GET/POST). `form` uses POST like `command`, but accepts both `application/x-www-form-urlencoded` and JSON via the `FormOrJson` extractor. This enables progressive enhancement: HTML forms submit url-encoded data natively, while JS clients can send JSON.
 
 ---
 

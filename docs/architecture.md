@@ -76,14 +76,14 @@ Browser → SvelteKit BFF → Rust (teleport-rs)
 6. The response is serialized as JSON and returned to the client
 7. The client deserializes into `RpcResult<T, E>` — a discriminated union of success, app error, or transport error
 
-Query procedures use GET with `serde_qs` for structured query params. Command procedures use POST with JSON body.
+Query procedures use GET with `serde_qs` for structured query params. Command procedures use POST with JSON body. Form procedures use POST and accept both `application/x-www-form-urlencoded` and JSON via the `FormOrJson` extractor.
 
 ## Auth Middleware
 
-Auth is configured on `TeleportRouter` with a cookie name and validator closure:
+Auth is configured on `TeleportRouter` with a cookie name and validator closure. The validator is generic — it returns `Option<U>` for any user type `U: Clone + Send + Sync + 'static`:
 
 ```rust
 .auth("session", |token, state| async move { state.validate_session(&token) })
 ```
 
-The validator returns `Option<AuthedUser>`. If the procedure signature includes `AuthedUser`, the middleware rejects unauthenticated requests with 401. `Option<AuthedUser>` makes auth optional.
+If the procedure signature includes a parameter with `#[auth]`, the middleware rejects unauthenticated requests with 401. The built-in `AuthedUser` type works by convention (no attribute needed). Use `Option<T>` for optional auth.

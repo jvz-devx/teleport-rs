@@ -63,7 +63,7 @@ Procedure types:
 |---|---|---|---|
 | `#[remote(query)]` | GET | Query params | Read-only fetches |
 | `#[remote(command)]` | POST | JSON body | Mutations |
-| `#[remote(form)]` | POST | Form data | Progressive enhancement |
+| `#[remote(form)]` | POST | Form-urlencoded or JSON | Progressive enhancement |
 
 ## 4. Set up the router
 
@@ -139,29 +139,35 @@ if (result.ok) {
 
 ## 6. Adding authentication
 
-Set up cookie-based auth on the router:
+Set up cookie-based auth on the router. The auth validator returns `Option<U>` for any custom user type:
 
 ```rust
+#[derive(Debug, Clone)]
+struct MyUser {
+    id: String,
+    role: String,
+}
+
 let app = TeleportRouter::new()
     .state(Arc::clone(&state))
     .auth("session", |token: String, state: Arc<AppState>| async move {
-        state.validate_session(&token)
+        state.validate_session(&token)  // returns Option<MyUser>
     })
     .mount();
 ```
 
-Then use `AuthedUser` in procedure signatures:
+Then use your user type with `#[auth]` in procedure signatures:
 
 ```rust
-use teleport::{remote, AppError, AuthedUser};
+use teleport::{remote, AppError};
 
 #[remote(query)]
-async fn get_profile(ctx: &AppState, auth: AuthedUser) -> Result<User, AppError> {
-    ctx.get_user(&auth.id).cloned().ok_or(AppError::NotFound)
+async fn get_profile(ctx: &AppState, #[auth] user: MyUser) -> Result<User, AppError> {
+    ctx.get_user(&user.id).cloned().ok_or(AppError::NotFound)
 }
 ```
 
-Procedures with `AuthedUser` automatically require authentication. Use `Option<AuthedUser>` for optional auth.
+The built-in `AuthedUser` type still works by convention (no `#[auth]` attribute needed). Use `Option<T>` for optional auth.
 
 ## 7. Typed errors
 

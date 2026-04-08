@@ -50,13 +50,13 @@ Structured audit of developer experience issues found after Phase 7a implementat
 
 **Mitigation:** Log a warning or return an error from `mount()` when state is not set but procedures expect it.
 
-### S3: State type mismatch — procedures silently skipped
+### S3: State type mismatch — panics at mount
 
-**Symptom:** Some procedures don't appear in the mounted router. No error at startup.
+**Symptom:** Application panics at startup with a clear error message naming the mismatched procedure.
 
-**Cause:** If a procedure's state type doesn't match the type passed to `.state()`, it's silently excluded during route registration.
+**Cause:** If a procedure's state type doesn't match the type passed to `.state()`, `mount()` panics immediately.
 
-**Mitigation:** Panic at `mount()` time with a clear message listing which procedures were skipped and why.
+**Resolution:** Implemented — `mount()` now panics with the procedure name and a message explaining that all `#[remote]` procedures must use the same state type as `TeleportRouter`.
 
 ### S4: Missing pub mod — procedure absent from export
 
