@@ -260,3 +260,42 @@ async fn login(...)    // → /rpc/auth.login
 **Decision:** Pin Rust edition 2024 with minimum supported Rust version (MSRV) 1.91.
 
 **Rationale:** Edition 2024 (stabilized in Rust 1.85) brings ergonomic improvements including `gen` blocks, `unsafe_op_in_unsafe_fn` as default lint, and refined `use` import resolution. Pinning MSRV to 1.91 ensures all contributors and CI use a consistent toolchain. Workspace-level `edition` and `rust-version` in `Cargo.toml` apply to all crates uniformly.
+
+---
+
+## 21. Export Binary Needs Simplification (Post-Implementation)
+
+**Problem:** The `teleport` ↔ `teleport-build` split created two parallel type hierarchies. Every project needs ~65 lines of boilerplate in `export.rs` to bridge them: manual `HttpMethod` conversion, `Types` collection management, `ProcedureInfo` construction from `ProcedureRegistration`.
+
+**Current state:** See `examples/demo/src/bin/export.rs` for the boilerplate every user must write.
+
+**Decision:** Simplify to a one-liner. Preferred approach: have `teleport-build` depend on `teleport` directly (no actual circular dependency since the cycle only exists through `teleport-macros`), then expose `teleport_build::export_from_inventory(config)` that handles all collection and conversion internally.
+
+**Fallback:** If the direct dependency doesn't work, create a `teleport-core` crate with shared types.
+
+---
+
+## 22. TypeScript Error Handling Needs Convenience Layer (Post-Implementation)
+
+**Problem:** The `RpcResult<T, E>` discriminated union is type-safe but verbose to consume. Every function in `data.remote.ts` has 5-6 identical lines of error unwrapping. The existing `unwrap()` helper loses typed error detail.
+
+**Current state:** See `examples/demo/frontend/src/lib/server/data.remote.ts` for the repetitive pattern.
+
+**Decision:** Add convenience helpers to `@teleport-rs/client`:
+- `rpcUnwrap()` — throws a `TeleportError` (extends `Error`) that preserves the full `AppError<E>` for downstream inspection
+- `mapError()` — transform errors while keeping the result pattern
+- Keep `RpcResult` as the base type for users who prefer explicit handling
+
+---
+
+## 23. Position as Framework-Agnostic (Post-Implementation)
+
+**Problem:** The project was designed around SvelteKit remote functions (`$app/server`), which is experimental. The generated TypeScript client is actually plain `fetch` — framework-agnostic by nature.
+
+**Decision:** Reposition teleport-rs as a general Rust → TypeScript RPC framework. SvelteKit is one integration example, not the primary target. Document usage with:
+- SvelteKit remote functions (current example)
+- Plain `fetch` / vanilla TS
+- React Query / TanStack Query
+- Next.js Server Actions
+
+The npm package `@teleport-rs/client` stays framework-agnostic. The Vite plugin remains SvelteKit-compatible but not SvelteKit-exclusive.

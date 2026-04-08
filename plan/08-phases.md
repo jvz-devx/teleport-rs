@@ -189,7 +189,30 @@ A complete, working example app that demonstrates the full integration between t
 
 ---
 
-## Phase 7: Polish + Validation Bridge (Future)
+## Phase 7a: DX Refinement (Post-Implementation Fixes)
+
+**Goal:** Fix the design issues identified during implementation. See `11-lessons-learned.md` for full context.
+
+**Duration:** 2-3 days
+
+### Tasks
+
+- [ ] Eliminate `HttpMethod` duplication — have `teleport-build` depend on `teleport` directly, or create `teleport-core`
+- [ ] Add `export_from_inventory(config)` convenience function in `teleport-build`
+- [ ] Simplify `examples/demo/src/bin/export.rs` to use the one-liner
+- [ ] Add `TeleportError` class to `@teleport-rs/client` (extends Error, carries AppError)
+- [ ] Add `rpcUnwrap()` helper that throws `TeleportError` with full error detail
+- [ ] Add `mapError()` combinator for transforming errors in the result pattern
+- [ ] Simplify `examples/demo/frontend/src/lib/server/data.remote.ts` using new helpers
+- [ ] Reposition docs/examples as framework-agnostic (not SvelteKit-only)
+
+### Deliverable
+
+The export binary drops from ~65 lines to ~5. The TS error handling boilerplate drops from 5-6 lines to 1. The project is positioned as a general Rust → TypeScript RPC framework.
+
+---
+
+## Phase 7b: Polish + Validation Bridge (Future)
 
 **Goal:** Specta → Zod bridge, better DX, production readiness.
 
@@ -213,12 +236,13 @@ A complete, working example app that demonstrates the full integration between t
 
 | Phase | Duration | Key Milestone                       |
 | ----- | -------- | ----------------------------------- |
-| 1     | 3-5 days | Proc macro + TS type generation     |
-| 2     | 3-5 days | Axum router serves HTTP endpoints   |
-| 3     | 3-5 days | Generated TS client with full types |
-| 4     | 2-3 days | Auth middleware + cookie forwarding |
-| 5     | 2-3 days | Vite plugin + dev loop              |
-| 6     | 2-3 days | SvelteKit integration examples      |
-| 7     | Ongoing  | Polish, docs, validation bridge     |
+| 1     | Done     | Proc macro + TS type generation     |
+| 2     | Done     | Axum router serves HTTP endpoints   |
+| 3     | Done     | Generated TS client with full types |
+| 4     | Done     | Auth middleware + cookie forwarding |
+| 5     | Done     | Vite plugin + dev loop              |
+| 6     | Done     | Integration examples                |
+| 7a    | Next     | DX refinement (lessons learned)     |
+| 7b    | Ongoing  | Polish, docs, validation bridge     |
 
-**Total estimated time for phases 1-6: 15-24 days** for a solo developer working full-time.
+**Phases 1-6 completed.** Phase 7a addresses design issues discovered during implementation.
