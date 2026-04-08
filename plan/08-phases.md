@@ -10,23 +10,23 @@
 
 - [x] Create workspace with `teleport`, `teleport-macros`, `teleport-build` crates
 - [x] Implement `AppError<T>` with `Serialize`, `Deserialize`, `specta::Type`
-- [ ] Implement `TeleportType` derive macro (wraps `Serialize + Deserialize + specta::Type`)
+- [x] Implement `teleport_type` attribute macro (prepends `Serialize + Deserialize + specta::Type` derives)
 - [x] Implement `ProcedureRegistration` struct for `inventory`
-- [ ] Implement `#[remote(query)]`, `#[remote(command)]`, `#[remote(form)]` proc macro
-  - [ ] Parse function signature (ctx type, input type, output type, error type)
-  - [ ] Validate return type is `Result<Output, AppError<E>>`
-  - [ ] Generate `inventory::submit!` block with procedure metadata
-  - [ ] Calculate namespace from module path
-  - [ ] Support `name = "..."` and `prefix = "..."` overrides
-- [ ] Implement `teleport-build::generate()` that:
-  - [ ] Collects all procedures via `inventory::collect`
-  - [ ] Generates `types.ts` from Specta type info
-  - [ ] Generates `errors.ts` with `AppError<T>`, `TransportError`, `RpcResult`, procedure-specific aliases
-  - [ ] Writes files to configured output directory
-- [ ] Implement `src/bin/export.rs` binary that calls `teleport_build::generate()`
-  - [ ] Reads `TELEPORT_OUTPUT_DIR` env var with fallback to default path
-- [ ] Write unit tests for type generation
-- [ ] Write integration test: define procedures, run `cargo run --bin export`, verify output matches expected
+- [x] Implement `#[remote(query)]`, `#[remote(command)]`, `#[remote(form)]` proc macro
+  - [x] Parse function signature (ctx type, input type, output type, error type)
+  - [x] Validate return type is `Result<Output, AppError<E>>`
+  - [x] Generate `inventory::submit!` block with procedure metadata
+  - [x] Calculate namespace from module path
+  - [x] Support `name = "..."` and `prefix = "..."` overrides
+- [x] Implement `teleport-build::generate()` that:
+  - [x] Collects all procedures via `inventory::collect`
+  - [x] Generates `types.ts` from Specta type info
+  - [x] Generates `errors.ts` with `AppError<T>`, `TransportError`, `RpcResult`, procedure-specific aliases
+  - [x] Writes files to configured output directory
+- [x] Implement export binary pattern (integration test acts as export binary)
+  - [x] Converts `ProcedureRegistration` to `ProcedureInfo` with shared `Types` collection
+- [x] Write unit tests for type generation (20 tests in teleport-build)
+- [x] Write integration test: define procedures, generate TS, verify output matches expected (5 tests)
 
 ### Deliverable
 

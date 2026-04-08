@@ -12,6 +12,15 @@ specta = { workspace = true }
 inventory = { workspace = true }
 teleport-macros = { path = "../teleport-macros" }
 
+[dev-dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+teleport-build = { path = "../teleport-build" }
+specta-typescript = { workspace = true }
+tempfile = "3"
+
 [features]
 default = []
 debug-manifest = []

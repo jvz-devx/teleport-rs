@@ -3,7 +3,8 @@ pub mod extractors;
 pub mod procedure;
 pub mod router;
 
-mod private;
+/// Internal module for macro-generated code. Not part of the public API.
+pub mod private;
 
 // Re-exports for user-facing API.
 pub use error::AppError;

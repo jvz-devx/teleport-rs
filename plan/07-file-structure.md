@@ -147,8 +147,8 @@ rust-version = "1.91"
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-specta = "2"
-specta-typescript = "0.0.8"  # Must match Specta v2's API — check compatibility on upgrade
+specta = { version = "=2.0.0-rc.24", features = ["derive"] }
+specta-typescript = "=0.0.11"  # Must match Specta v2's API — check compatibility on upgrade
 tokio = { version = "1", features = ["full"] }
 inventory = "0.3"
 proc-macro2 = "1"

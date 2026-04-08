@@ -12,6 +12,9 @@ pub struct Config {
     pub include_manifest: bool,
     /// URL prefix for all RPC routes (e.g. `"/rpc"`).
     pub route_prefix: String,
+    /// Override the import path for the `rpc` function.
+    /// Defaults to `"@teleport-rs/client"` when `None`.
+    pub client_import_path: Option<String>,
 }
 
 /// Strategy for deriving procedure namespaces.
