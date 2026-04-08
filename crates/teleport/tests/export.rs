@@ -101,6 +101,8 @@ fn full_pipeline_generates_ts_files() {
         .expect("errors.ts should exist");
     let client_ts = std::fs::read_to_string(tmp.path().join("client.ts"))
         .expect("client.ts should exist");
+    let index_ts = std::fs::read_to_string(tmp.path().join("index.ts"))
+        .expect("index.ts should exist");
 
     // types.ts should contain our registered structs.
     assert!(types_ts.contains("User"), "types.ts missing User:\n{types_ts}");
@@ -147,6 +149,20 @@ fn full_pipeline_generates_ts_files() {
     assert!(
         client_ts.contains("rpc(\"POST\""),
         "client.ts missing POST rpc call:\n{client_ts}"
+    );
+
+    // index.ts should re-export all modules.
+    assert!(
+        index_ts.contains("export * from \"./types\""),
+        "index.ts missing types re-export:\n{index_ts}"
+    );
+    assert!(
+        index_ts.contains("export * from \"./errors\""),
+        "index.ts missing errors re-export:\n{index_ts}"
+    );
+    assert!(
+        index_ts.contains("export * from \"./client\""),
+        "index.ts missing client re-export:\n{index_ts}"
     );
 }
 

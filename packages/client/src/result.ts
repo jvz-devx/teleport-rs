@@ -4,15 +4,15 @@ import type { AppError, RpcResult, TransportError } from "./types";
 /** Type guard: is this a transport-level error? */
 export function isTransportError<T, E>(
   result: RpcResult<T, E>,
-): result is { ok: false; transport: TransportError } {
-  return !result.ok && "transport" in result;
+): result is { kind: "transport"; ok: false; transport: TransportError } {
+  return result.kind === "transport";
 }
 
 /** Type guard: is this an application-level error from Rust? */
 export function isAppError<T, E>(
   result: RpcResult<T, E>,
-): result is { ok: false; error: AppError<E> } {
-  return !result.ok && "error" in result;
+): result is { kind: "error"; ok: false; error: AppError<E> } {
+  return result.kind === "error";
 }
 
 /**
@@ -33,8 +33,8 @@ export function unwrap<T, E>(result: RpcResult<T, E>): T {
  * Use in SvelteKit remote functions or any context where throwing is acceptable.
  */
 export function rpcUnwrap<T, E>(result: RpcResult<T, E>): T {
-  if (result.ok) return result.data;
-  if ("transport" in result) throw new TransportFailure(result.transport);
+  if (result.kind === "success") return result.data;
+  if (result.kind === "transport") throw new TransportFailure(result.transport);
   throw new TeleportError(result.error);
 }
 
@@ -46,7 +46,7 @@ export function mapError<T, E, R>(
   result: RpcResult<T, E>,
   handler: (error: AppError<E>) => R,
 ): T | R {
-  if (result.ok) return result.data;
-  if ("transport" in result) throw new TransportFailure(result.transport);
+  if (result.kind === "success") return result.data;
+  if (result.kind === "transport") throw new TransportFailure(result.transport);
   return handler(result.error);
 }

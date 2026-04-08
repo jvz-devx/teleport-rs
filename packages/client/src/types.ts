@@ -22,8 +22,8 @@ export type AppError<T = never> =
  * - Transport error (network/protocol): `{ ok: false, transport: TransportError }`
  */
 export type RpcResult<T, E = never> =
-  | { ok: true; data: T }
-  | { ok: false; error: AppError<E> }
-  | { ok: false; transport: TransportError };
+  | { kind: "success"; ok: true; data: T }
+  | { kind: "error"; ok: false; error: AppError<E> }
+  | { kind: "transport"; ok: false; transport: TransportError };
 
 export type HttpMethod = "GET" | "POST";

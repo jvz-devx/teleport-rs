@@ -50,7 +50,7 @@ export async function rpc<T, E>(
     if (!response.ok) {
       try {
         const errorBody = await response.json();
-        const result = { ok: false as const, error: errorBody as AppError<E> };
+        const result = { kind: "error" as const, ok: false as const, error: errorBody as AppError<E> };
         config.onError?.({ type: "app", error: errorBody as AppError<unknown> });
         return result;
       } catch {
@@ -60,13 +60,13 @@ export async function rpc<T, E>(
           body: await response.text(),
         };
         config.onError?.({ type: "transport", error: transportError });
-        return { ok: false, transport: transportError };
+        return { kind: "transport", ok: false, transport: transportError };
       }
     }
 
     const text = await response.text();
     const data = text ? (JSON.parse(text) as T) : (undefined as T);
-    return { ok: true, data };
+    return { kind: "success", ok: true, data };
   } catch (err) {
     clearTimeout(timeoutId);
 
@@ -76,7 +76,7 @@ export async function rpc<T, E>(
         message: `Request timed out after ${config.timeout ?? 30_000}ms`,
       };
       config.onError?.({ type: "transport", error: transportError });
-      return { ok: false, transport: transportError };
+      return { kind: "transport", ok: false, transport: transportError };
     }
 
     const transportError: TransportError = {
@@ -84,6 +84,6 @@ export async function rpc<T, E>(
       message: err instanceof Error ? err.message : String(err),
     };
     config.onError?.({ type: "transport", error: transportError });
-    return { ok: false, transport: transportError };
+    return { kind: "transport", ok: false, transport: transportError };
   }
 }

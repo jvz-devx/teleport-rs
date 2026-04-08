@@ -1,4 +1,5 @@
 import type { Plugin, ViteDevServer } from "vite";
+import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { createBindingsWatcher } from "./watcher.js";
 
@@ -37,6 +38,27 @@ export function teleportVite(options: TeleportViteOptions): Plugin {
 
     configureServer(server: ViteDevServer) {
       const bindingsDir = resolve(options.bindingsPath);
+
+      // Check for stale/missing bindings
+      if (!existsSync(bindingsDir)) {
+        server.config.logger.warn(
+          "[teleport-rs] Generated bindings directory not found: " +
+            bindingsDir +
+            '\n  Run "cargo run --bin export" to generate TypeScript bindings.',
+        );
+      } else {
+        const tsFiles = readdirSync(bindingsDir).filter((f) =>
+          f.endsWith(".ts"),
+        );
+        if (tsFiles.length === 0) {
+          server.config.logger.warn(
+            "[teleport-rs] No .ts files found in " +
+              bindingsDir +
+              '\n  Run "cargo run --bin export" to generate TypeScript bindings.',
+          );
+        }
+      }
+
       const watcher = createBindingsWatcher(server, bindingsDir);
 
       server.httpServer?.on("close", () => watcher.close());

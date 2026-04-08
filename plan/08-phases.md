@@ -240,8 +240,10 @@ The export binary drops from ~65 lines to ~5. The TS error handling boilerplate 
 ### Priority 4 — Client polish
 
 - [x] A5: Remove Content-Type header from GET requests
-- [ ] A6: Investigate tree-shakeable exports (individual functions alongside namespace objects)
-- [ ] A3: Improve RpcResult ergonomics — better narrowing helpers or two-branch union
+- [x] A6: Tree-shakeable exports (individual functions + namespace objects)
+- [x] A3: RpcResult `kind` discriminant for idiomatic TS narrowing
+- [x] M6: Stale bindings detection in Vite plugin
+- [x] M7: Auto-generate barrel `index.ts`
 
 ### Future (not this phase)
 

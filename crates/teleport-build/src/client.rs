@@ -1,7 +1,8 @@
 // TypeScript client function generation.
 //
-// Generates `client.ts` with namespaced RPC call functions
-// that import from `types.ts` and `errors.ts`.
+// Generates `client.ts` with tree-shakeable individual function exports
+// and ergonomic namespace objects that reference them.
+// Imports from `types.ts` and `errors.ts`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -101,29 +102,23 @@ pub(crate) fn generate_client(
         let _ = writeln!(out, "import type {{ {} }} from \"./types\";", imports.join(", "));
     }
 
-    // Generate namespace objects.
+    // Generate tree-shakeable individual function exports.
     for (ns_name, entries) in &namespaces {
-        out.push('\n');
-        let _ = writeln!(out, "export const {ns_name} = {{");
+        for entry in entries {
+            out.push('\n');
 
-        for (i, entry) in entries.iter().enumerate() {
             // JSDoc comment.
             if entry.doc.is_empty() {
-                let _ = writeln!(out, "  /** {} {} */", entry.http_method, entry.path);
+                let _ = writeln!(out, "/** {} {} */", entry.http_method, entry.path);
             } else {
-                let _ = writeln!(out, "  /**");
+                let _ = writeln!(out, "/**");
                 for line in entry.doc.lines() {
-                    let _ = writeln!(out, "   * {line}");
+                    let _ = writeln!(out, " * {line}");
                 }
-                let _ = writeln!(
-                    out,
-                    "   * {} {}",
-                    entry.http_method, entry.path
-                );
-                let _ = writeln!(out, "   */");
+                let _ = writeln!(out, " * {} {}", entry.http_method, entry.path);
+                let _ = writeln!(out, " */");
             }
 
-            // Function signature.
             let param = entry
                 .input_ts
                 .as_ref()
@@ -135,18 +130,34 @@ pub(crate) fn generate_client(
                 "undefined"
             };
 
-            let _ = write!(
+            let _ = writeln!(
                 out,
-                "  {name}: ({param}): Promise<RpcResult<{output}, {error}>> =>\n    rpc(\"{method}\", \"{path}\", {rpc_arg})",
+                "export function {ns}_{name}({param}): Promise<RpcResult<{output}, {error}>> {{\n  return rpc(\"{method}\", \"{path}\", {rpc_arg});\n}}",
+                ns = ns_name,
                 name = entry.method_name,
                 output = entry.output_ts,
                 error = entry.error_ts,
                 method = entry.http_method,
                 path = entry.path,
             );
+        }
+    }
+
+    // Generate ergonomic namespace objects that reference the functions above.
+    for (ns_name, entries) in &namespaces {
+        out.push('\n');
+        let _ = writeln!(out, "export const {ns_name} = {{");
+
+        for (i, entry) in entries.iter().enumerate() {
+            let _ = write!(
+                out,
+                "  {name}: {ns}_{name}",
+                name = entry.method_name,
+                ns = ns_name,
+            );
 
             if i < entries.len() - 1 {
-                out.push_str(",\n\n");
+                out.push_str(",\n");
             } else {
                 out.push('\n');
             }
@@ -309,10 +320,13 @@ mod tests {
         let config = test_config();
         let output = generate_client(&[proc], &config, &resolved).expect("should generate");
 
-        assert!(output.contains("export const users = {"));
-        assert!(output.contains("getUser"));
+        // Tree-shakeable function export.
+        assert!(output.contains("export function users_getUser("));
         assert!(output.contains("rpc(\"GET\""));
         assert!(output.contains("/rpc/users.getUser"));
+        // Namespace object references the function.
+        assert!(output.contains("export const users = {"));
+        assert!(output.contains("getUser: users_getUser"));
         assert!(output.contains("@teleport-rs/client"));
     }
 
@@ -335,6 +349,7 @@ mod tests {
         let output = generate_client(&[proc], &config, &resolved).expect("should generate");
 
         assert!(output.contains("undefined"));
-        assert!(output.contains("(): Promise<"));
+        assert!(output.contains("export function health_check():"));
+        assert!(output.contains("check: health_check"));
     }
 }
