@@ -3,6 +3,7 @@ members = [
     "crates/teleport",
     "crates/teleport-macros",
     "crates/teleport-build",
+    "examples/demo",
 ]
 resolver = "3"
 

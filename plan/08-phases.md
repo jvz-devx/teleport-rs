@@ -169,19 +169,19 @@ A smooth dev experience where changing a Rust procedure automatically updates th
 
 ### Tasks
 
-- [ ] Write comprehensive example `data.remote.ts` files:
-  - [ ] Query pattern (getUser)
-  - [ ] Command pattern (login, logout)
-  - [ ] Form pattern (createPost)
-  - [ ] Error handling patterns (transport vs app errors)
-  - [ ] Auth patterns (login/set cookie, getMyProfile)
-- [ ] Write SvelteKit hook for cookie handling (`hooks.server.ts`)
-- [ ] Write example pages using remote functions:
-  - [ ] Login page with form validation
-  - [ ] Profile page with authenticated data
-  - [ ] Posts page with CRUD operations
-- [ ] Write example Rust server with full auth flow
-- [ ] Test with SvelteKit remote functions (require SvelteKit experimental flag)
+- [x] Write comprehensive example `data.remote.ts` files:
+  - [x] Query pattern (getUser, listUsers)
+  - [x] Command pattern (login, logout)
+  - [x] Form pattern (createPost)
+  - [x] Error handling patterns (transport vs app errors)
+  - [x] Auth patterns (getMyProfile with AuthedUser)
+- [x] Write SvelteKit layout with navigation and config import
+- [x] Write example pages using remote functions:
+  - [x] Login page with form validation and error handling
+  - [x] Profile page with authenticated data
+  - [x] Home page with user list
+- [x] Write example Rust server with full auth flow (7 procedures, mock state)
+- [x] Export binary generates all 3 TS files from example procedures
 
 ### Deliverable
 

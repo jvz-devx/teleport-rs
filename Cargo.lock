@@ -686,6 +686,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "teleport-demo"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "inventory",
+ "serde",
+ "serde_json",
+ "specta",
+ "teleport",
+ "teleport-build",
+ "tokio",
+]
+
+[[package]]
 name = "teleport-macros"
 version = "0.1.0"
 dependencies = [

@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "packages/client",
-    "packages/vite"
+    "packages/vite",
+    "examples/demo/frontend"
   ]
 }
