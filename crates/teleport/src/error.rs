@@ -18,7 +18,18 @@ pub enum AppError<T = ()> {
     Detail { detail: T },
 }
 
+impl<T> From<T> for AppError<T> {
+    fn from(detail: T) -> Self {
+        Self::Detail { detail }
+    }
+}
+
 impl<T> AppError<T> {
+    /// Create a `Detail` variant from a procedure-specific error value.
+    pub const fn detail(detail: T) -> Self {
+        Self::Detail { detail }
+    }
+
     const fn status_code(&self) -> StatusCode {
         match self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,

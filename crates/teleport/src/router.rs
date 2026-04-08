@@ -94,8 +94,9 @@ where
 
     /// Collect all registered procedures and build an Axum router.
     ///
-    /// Each `#[remote]` procedure's mount function is called with a type-erased
-    /// router. The state type must match what the procedures were defined with.
+    /// Uses `inventory::iter` to discover all `#[remote]` procedures registered
+    /// via `inventory::submit!`. Each procedure's type-erased mount function is
+    /// called to add its route to the router.
     ///
     /// # Panics
     ///
@@ -149,6 +150,32 @@ where
         }
 
         final_router
+    }
+}
+
+#[cfg(feature = "export")]
+impl<S> TeleportRouter<S> {
+    /// Generate TypeScript bindings from all registered procedures.
+    /// Call this from your server binary during development.
+    pub fn export(config: &teleport_build::Config) -> Result<(), teleport_build::GenerateError> {
+        teleport_build::export_from_inventory(config)
+    }
+}
+
+#[cfg(feature = "export")]
+impl<S> TeleportRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    /// Generate TypeScript bindings as part of the builder chain.
+    /// Bindings are generated before the router is built.
+    #[must_use]
+    #[allow(clippy::print_stderr)]
+    pub fn export_ts(self, config: &teleport_build::Config) -> Self {
+        if let Err(e) = teleport_build::export_from_inventory(config) {
+            eprintln!("teleport-rs: failed to export TypeScript bindings: {e}");
+        }
+        self
     }
 }
 

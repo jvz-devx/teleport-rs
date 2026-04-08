@@ -1,0 +1,9 @@
+[package]
+name = "teleport-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+specta = { workspace = true }
+inventory = { workspace = true }

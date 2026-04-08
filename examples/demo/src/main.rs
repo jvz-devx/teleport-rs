@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use teleport::TeleportRouter;
+use teleport::{ExportConfig, TeleportRouter};
+use tower_http::cors::CorsLayer;
 
 mod api;
 mod state;
@@ -10,6 +11,11 @@ mod types;
 
 #[tokio::main]
 async fn main() {
+    TeleportRouter::<state::AppState>::export(
+        &ExportConfig::new("frontend/src/lib/api/generated"),
+    )
+    .expect("failed to export TS bindings");
+
     let state = Arc::new(state::AppState::new());
 
     let app = TeleportRouter::new()
@@ -18,7 +24,8 @@ async fn main() {
             state.validate_session(&token)
         })
         .manifest(true)
-        .mount();
+        .mount()
+        .layer(CorsLayer::permissive()); // permissive for demo; use CorsLayer::new() with explicit origins in production
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await

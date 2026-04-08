@@ -8,15 +8,11 @@ rust-version.workspace = true
 name = "server"
 path = "src/main.rs"
 
-[[bin]]
-name = "export"
-path = "src/bin/export.rs"
-
 [dependencies]
-teleport = { path = "../../crates/teleport" }
-teleport-build = { path = "../../crates/teleport-build" }
+teleport = { path = "../../crates/teleport", features = ["export"] }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 specta = { workspace = true }
+tower-http = { workspace = true }

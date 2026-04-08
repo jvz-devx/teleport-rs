@@ -115,18 +115,15 @@ fn full_pipeline_generates_ts_files() {
         "types.ts missing GetUserError:\n{types_ts}"
     );
 
-    // errors.ts should contain the framework error types.
+    // errors.ts should import AppError from the client package
+    // and contain procedure-specific error aliases.
     assert!(
         errors_ts.contains("AppError"),
-        "errors.ts missing AppError:\n{errors_ts}"
+        "errors.ts missing AppError import:\n{errors_ts}"
     );
     assert!(
-        errors_ts.contains("TransportError"),
-        "errors.ts missing TransportError:\n{errors_ts}"
-    );
-    assert!(
-        errors_ts.contains("RpcResult"),
-        "errors.ts missing RpcResult:\n{errors_ts}"
+        errors_ts.contains("GetUserError"),
+        "errors.ts missing GetUserError alias:\n{errors_ts}"
     );
 
     // client.ts should contain namespace and procedure functions.

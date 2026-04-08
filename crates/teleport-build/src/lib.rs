@@ -6,7 +6,7 @@ pub(crate) mod ts_utils;
 pub mod typescript;
 
 pub use config::{Config, Naming, NamingCase, NamespaceStyle};
-pub use teleport::HttpMethod;
+pub use teleport_core::HttpMethod;
 
 use std::path::Path;
 
@@ -45,7 +45,7 @@ pub fn export_from_inventory(config: &Config) -> Result<(), GenerateError> {
     let mut types = specta::Types::default();
     let mut procedures = Vec::new();
 
-    for reg in inventory::iter::<teleport::ProcedureRegistration> {
+    for reg in inventory::iter::<teleport_core::ProcedureRegistration> {
         let info = ProcedureInfo {
             name: reg.name(),
             method: reg.method,
@@ -88,7 +88,7 @@ fn generate(
     std::fs::create_dir_all(&config.output_dir).map_err(GenerateError::CreateDir)?;
 
     let types_content = typescript::generate_types(resolved_types)?;
-    let errors_content = errors::generate_errors(procedures, resolved_types)?;
+    let errors_content = errors::generate_errors(procedures, config, resolved_types)?;
     let client_content = client::generate_client(procedures, config, resolved_types)?;
 
     write_if_changed(&config.output_dir.join("types.ts"), &types_content)?;

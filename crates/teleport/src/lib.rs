@@ -14,3 +14,6 @@ pub use extractors::{AuthedUser, QsQuery, TeleportUser};
 pub use procedure::{HttpMethod, ProcedureRegistration, ProcedureType};
 pub use router::{Manifest, ManifestEntry, TeleportRouter};
 pub use teleport_macros::{remote, teleport_type};
+
+#[cfg(feature = "export")]
+pub use teleport_build::Config as ExportConfig;

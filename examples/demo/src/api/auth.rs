@@ -11,11 +11,11 @@ async fn login(
     ctx: &AppState,
     input: LoginRequest,
 ) -> Result<LoginResponse, AppError<LoginErrorDetail>> {
-    let (token, user) = ctx.login(&input.email, &input.password).ok_or(AppError::Detail {
-        detail: LoginErrorDetail {
+    let (token, user) = ctx.login(&input.email, &input.password).ok_or(AppError::detail(
+        LoginErrorDetail {
             invalid_credentials: true,
         },
-    })?;
+    ))?;
 
     Ok(LoginResponse {
         token: token.to_owned(),

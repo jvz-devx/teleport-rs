@@ -12,7 +12,9 @@ serde_json = { workspace = true }
 serde_qs = { workspace = true }
 specta = { workspace = true }
 inventory = { workspace = true }
+teleport-core = { path = "../teleport-core" }
 teleport-macros = { path = "../teleport-macros" }
+teleport-build = { path = "../teleport-build", optional = true }
 
 [dev-dependencies]
 axum = { workspace = true }
@@ -28,3 +30,4 @@ http = { workspace = true }
 [features]
 default = []
 debug-manifest = []
+export = ["dep:teleport-build"]

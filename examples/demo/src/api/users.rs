@@ -8,11 +8,11 @@ use crate::types::{GetUserErrorDetail, User};
 /// Fetch a single user by ID.
 #[remote(query)]
 async fn get_user(ctx: &AppState, id: String) -> Result<User, AppError<GetUserErrorDetail>> {
-    ctx.get_user(&id).cloned().ok_or(AppError::Detail {
-        detail: GetUserErrorDetail {
+    ctx.get_user(&id).cloned().ok_or(AppError::detail(
+        GetUserErrorDetail {
             user_not_found: true,
         },
-    })
+    ))
 }
 
 /// List all registered users.
