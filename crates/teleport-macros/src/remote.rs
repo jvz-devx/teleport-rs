@@ -26,6 +26,8 @@ struct SigInfo {
     state_ty: Type,
     has_auth: bool,
     has_optional_auth: bool,
+    /// Custom auth type when using `#[auth]` with a non-`AuthedUser` type.
+    auth_ty: Option<Type>,
     input_ty: Option<Type>,
     output_ty: Type,
     error_ty: Type,
@@ -115,6 +117,25 @@ fn parse_attr(attr: TokenStream) -> Result<RemoteAttr> {
 // Signature parsing
 // ---------------------------------------------------------------------------
 
+/// Check whether a parameter has the `#[auth]` attribute.
+fn has_auth_attr(param: &PatType) -> bool {
+    param.attrs.iter().any(|attr| attr.path().is_ident("auth"))
+}
+
+/// Check whether a parameter has `#[auth]` wrapping `Option<T>`.
+fn has_optional_auth_attr(param: &PatType) -> bool {
+    if !has_auth_attr(param) {
+        return false;
+    }
+    let Type::Path(tp) = param.ty.as_ref() else {
+        return false;
+    };
+    tp.path
+        .segments
+        .last()
+        .is_some_and(|seg| seg.ident == "Option")
+}
+
 fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
     let sig = &func.sig;
 
@@ -151,20 +172,28 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
 
     let mut has_auth = false;
     let mut has_optional_auth = false;
+    let mut auth_ty: Option<Type> = None;
     let mut input_ty: Option<Type> = None;
 
     for param in params.iter().skip(1) {
         let ty = param.ty.as_ref();
-        if is_authed_user(ty) {
+        let is_auth_by_attr = has_auth_attr(param);
+        let is_auth_by_name = is_authed_user(ty);
+        let is_opt_auth_by_name = is_option_authed_user(ty);
+
+        if is_auth_by_attr || is_auth_by_name || is_opt_auth_by_name {
             if has_auth || has_optional_auth {
-                return Err(Error::new(ty.span(), "duplicate AuthedUser parameter"));
+                return Err(Error::new(ty.span(), "duplicate auth parameter"));
             }
-            has_auth = true;
-        } else if is_option_authed_user(ty) {
-            if has_auth || has_optional_auth {
-                return Err(Error::new(ty.span(), "duplicate AuthedUser parameter"));
+            if is_auth_by_attr && has_optional_auth_attr(param) || is_opt_auth_by_name {
+                has_optional_auth = true;
+            } else {
+                has_auth = true;
             }
-            has_optional_auth = true;
+            // For #[auth]-attributed params with custom types, store the type.
+            if is_auth_by_attr && !is_auth_by_name && !is_opt_auth_by_name {
+                auth_ty = Some(ty.clone());
+            }
         } else {
             if input_ty.is_some() {
                 return Err(Error::new(
@@ -182,6 +211,7 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
         state_ty,
         has_auth,
         has_optional_auth,
+        auth_ty,
         input_ty,
         output_ty,
         error_ty,
@@ -371,8 +401,17 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         &sig_info,
     );
 
+    // Strip #[auth] attributes from the original function so the compiler
+    // doesn't reject them as unknown attributes.
+    let mut cleaned_func = func.clone();
+    for arg in &mut cleaned_func.sig.inputs {
+        if let FnArg::Typed(pt) = arg {
+            pt.attrs.retain(|attr| !attr.path().is_ident("auth"));
+        }
+    }
+
     Ok(quote! {
-        #func
+        #cleaned_func
         #handler_fn
         #registration
     })
@@ -395,9 +434,18 @@ fn gen_handler(
     };
 
     let auth_extract = if sig.has_auth {
-        Some(quote! { auth: teleport::AuthedUser })
+        let ty = sig
+            .auth_ty
+            .as_ref()
+            .map_or_else(|| quote! { teleport::AuthedUser }, |t| quote! { #t });
+        Some(quote! { auth: #ty })
     } else if sig.has_optional_auth {
-        Some(quote! { auth: Option<teleport::AuthedUser> })
+        // custom_ty already includes Option<T> from the parameter
+        let ty = sig.auth_ty.as_ref().map_or_else(
+            || quote! { Option<teleport::AuthedUser> },
+            |t| quote! { #t },
+        );
+        Some(quote! { auth: #ty })
     } else {
         None
     };

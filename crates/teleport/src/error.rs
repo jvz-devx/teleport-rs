@@ -32,10 +32,17 @@ impl<T> AppError<T> {
     }
 }
 
+#[allow(clippy::print_stderr)]
 impl<T: Serialize> IntoResponse for AppError<T> {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        let body = serde_json::to_string(&self).unwrap_or_default();
+        let body = match serde_json::to_string(&self) {
+            Ok(json) => json,
+            Err(err) => {
+                eprintln!("teleport-rs: failed to serialize AppError: {err}");
+                r#"{"type":"Internal","message":"error serialization failed"}"#.to_owned()
+            }
+        };
         (status, [("content-type", "application/json")], body).into_response()
     }
 }

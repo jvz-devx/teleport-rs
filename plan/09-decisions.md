@@ -299,3 +299,51 @@ async fn login(...)    // → /rpc/auth.login
 - Next.js Server Actions
 
 The npm package `@teleport-rs/client` stays framework-agnostic. The Vite plugin remains SvelteKit-compatible but not SvelteKit-exclusive.
+
+---
+
+## 24. Make AuthedUser Generic
+
+**Problem:** `AuthedUser { id: String, email: String }` is a fixed struct that blocks real apps needing roles, permissions, tenant IDs, or other custom fields.
+
+**Decision:** `TeleportRouter` becomes generic over user type `U: Clone + Send + Sync + 'static`. The auth middleware validator closure returns `Option<U>` instead of `Option<AuthedUser>`. The `#[remote]` macro detects auth parameters by trait bound, not by type name — any parameter implementing the required bounds and marked with `#[auth]` (or detected via convention) is treated as the authenticated user.
+
+**Alternatives considered:**
+
+- A: Keep fixed struct, add `HashMap<String, Value>` extras field — half-measure, still not type-safe
+- B: Generic user type on router (chosen) — full flexibility, type-safe throughout
+- C: Trait object `dyn UserInfo` — loses concrete type, requires downcasting
+
+**Tradeoff:** More complex generics on `TeleportRouter<S, U>`, but necessary for any real-world application. The export binary and proc macro need to be aware of the generic, adding implementation complexity.
+
+---
+
+## 25. Add Global Error Interceptor
+
+**Problem:** No way to handle 401 errors globally (e.g., redirect to login page). Every call site must individually check for unauthorized errors.
+
+**Decision:** Add `onError` callback to `RpcConfig`, called on every failed RPC before returning the `RpcResult`. The callback receives the full error (either `AppError` or `TransportError`) and can perform side effects (redirect, toast notification, logging). The `RpcResult` is still returned to the caller — `onError` is a notification, not an error swallower.
+
+**Alternatives considered:**
+
+- A: `onError` callback (chosen) — simple, composable, doesn't change return types
+- B: Middleware/interceptor chain — too complex for the current scope
+- C: Global error event emitter — decouples too much, hard to test
+
+**Rationale:** The most common use case is "on 401, redirect to login". This requires exactly one global hook. A callback on config is the simplest mechanism that solves the problem without over-engineering.
+
+---
+
+## 26. Fix Generated Path Format
+
+**Problem:** Generated procedure paths include the `/rpc` prefix (e.g., `"/rpc/auth.login"`), and the default `baseUrl` in `RpcConfig` is also `"/rpc"`. This causes double-prefix requests: `/rpc/rpc/auth.login`.
+
+**Decision:** Change default `baseUrl` to `""` (empty string). Generated paths keep the `/rpc` prefix as-is. Users set `baseUrl` to their server origin when the Rust server is on a different host/port (e.g., `"http://localhost:3000"`).
+
+**Alternatives considered:**
+
+- A: Change default baseUrl to "" (chosen) — minimal change, generated paths stay consistent with Axum routes
+- B: Remove /rpc from generated paths, keep baseUrl as "/rpc" — breaks the correspondence between generated paths and Axum route paths
+- C: Auto-detect and strip duplicate prefix — fragile, hides the real problem
+
+**Rationale:** The generated paths should match exactly what Axum serves. The `baseUrl` is just a host/origin prefix, not a path prefix. Changing the default to empty string is the smallest fix with the clearest semantics.

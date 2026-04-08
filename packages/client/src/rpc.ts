@@ -23,7 +23,6 @@ export async function rpc<T, E>(
 
   try {
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       ...(config.headers ? await config.headers() : {}),
     };
 
@@ -40,6 +39,7 @@ export async function rpc<T, E>(
       const queryString = qs.stringify(input, { skipNulls: true });
       if (queryString) url = `${url}?${queryString}`;
     } else if (method === "POST" && input !== undefined) {
+      headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(input);
     }
 
@@ -50,40 +50,40 @@ export async function rpc<T, E>(
     if (!response.ok) {
       try {
         const errorBody = await response.json();
-        return { ok: false, error: errorBody as AppError<E> };
+        const result = { ok: false as const, error: errorBody as AppError<E> };
+        config.onError?.({ type: "app", error: errorBody as AppError<unknown> });
+        return result;
       } catch {
-        return {
-          ok: false,
-          transport: {
-            type: "ServerError",
-            status: response.status,
-            body: await response.text(),
-          },
+        const transportError: TransportError = {
+          type: "ServerError",
+          status: response.status,
+          body: await response.text(),
         };
+        config.onError?.({ type: "transport", error: transportError });
+        return { ok: false, transport: transportError };
       }
     }
 
-    const data = (await response.json()) as T;
+    const text = await response.text();
+    const data = text ? (JSON.parse(text) as T) : (undefined as T);
     return { ok: true, data };
   } catch (err) {
     clearTimeout(timeoutId);
 
     if (err instanceof DOMException && err.name === "AbortError") {
-      return {
-        ok: false,
-        transport: {
-          type: "Timeout",
-          message: `Request timed out after ${config.timeout ?? 30_000}ms`,
-        },
+      const transportError: TransportError = {
+        type: "Timeout",
+        message: `Request timed out after ${config.timeout ?? 30_000}ms`,
       };
+      config.onError?.({ type: "transport", error: transportError });
+      return { ok: false, transport: transportError };
     }
 
-    return {
-      ok: false,
-      transport: {
-        type: "NetworkError",
-        message: err instanceof Error ? err.message : String(err),
-      },
+    const transportError: TransportError = {
+      type: "NetworkError",
+      message: err instanceof Error ? err.message : String(err),
     };
+    config.onError?.({ type: "transport", error: transportError });
+    return { ok: false, transport: transportError };
   }
 }

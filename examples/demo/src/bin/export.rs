@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, clippy::print_stdout)]
 
-use teleport_build::{Config, Naming, NamespaceStyle};
+use teleport_build::Config;
 
 // Pull in the procedure registrations from the main crate modules.
 #[allow(unused_imports)]
@@ -12,19 +12,10 @@ fn main() {
         std::path::PathBuf::from,
     );
 
-    let config = Config {
-        output_dir: out_dir,
-        namespace_style: NamespaceStyle::default(),
-        naming: Naming::default(),
-        include_manifest: false,
-        route_prefix: "/rpc".to_owned(),
-        client_import_path: None,
-    };
-
     println!("Generating TypeScript bindings...");
 
-    teleport_build::export_from_inventory(&config)
+    teleport_build::export_from_inventory(&Config::new(out_dir))
         .expect("failed to generate TypeScript bindings");
 
-    println!("Done! Output written to {}", config.output_dir.display());
+    println!("Done!");
 }

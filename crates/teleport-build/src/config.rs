@@ -17,6 +17,20 @@ pub struct Config {
     pub client_import_path: Option<String>,
 }
 
+impl Config {
+    /// Create a new configuration with the given output directory and sensible defaults.
+    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            output_dir: output_dir.into(),
+            namespace_style: NamespaceStyle::default(),
+            naming: Naming::default(),
+            include_manifest: false,
+            route_prefix: "/rpc".to_owned(),
+            client_import_path: None,
+        }
+    }
+}
+
 /// Strategy for deriving procedure namespaces.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NamespaceStyle {

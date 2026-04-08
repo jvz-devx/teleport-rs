@@ -40,6 +40,7 @@ pub(crate) struct ProcedureInfo {
 /// # Errors
 ///
 /// Returns an error if type resolution or file writing fails.
+#[allow(clippy::print_stderr)]
 pub fn export_from_inventory(config: &Config) -> Result<(), GenerateError> {
     let mut types = specta::Types::default();
     let mut procedures = Vec::new();
@@ -55,6 +56,10 @@ pub fn export_from_inventory(config: &Config) -> Result<(), GenerateError> {
             error_type: (reg.error_type)(&mut types),
         };
         procedures.push(info);
+    }
+
+    if procedures.is_empty() {
+        eprintln!("teleport-rs warning: no procedures found. Did you import all modules containing #[remote] functions?");
     }
 
     let resolved = specta::ResolvedTypes::from_resolved_types(types);

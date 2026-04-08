@@ -46,6 +46,23 @@ where
     }
 }
 
+/// Marker trait for types that can be used as authenticated user in `#[remote]` procedures.
+///
+/// Implement this for your custom user type alongside [`FromRequestParts`].
+/// The built-in [`AuthedUser`] already implements this trait.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// #[derive(Clone)]
+/// struct MyUser { id: i64 }
+///
+/// impl TeleportUser for MyUser {}
+/// ```
+pub trait TeleportUser: Clone + Send + Sync + 'static {}
+
+impl TeleportUser for AuthedUser {}
+
 /// Query parameter extractor using `serde_qs` for bracket-notation support.
 ///
 /// Unlike Axum's built-in `Query<T>` (which uses `serde_urlencoded`), this

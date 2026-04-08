@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
-use teleport::{remote, AppError, AuthedUser, ProcedureRegistration, ProcedureType, TeleportRouter};
+use teleport::{remote, AppError, AuthedUser, ProcedureRegistration, ProcedureType, TeleportRouter, TeleportUser};
 
 // A minimal state type for testing.
 #[derive(Clone)]
@@ -98,6 +100,41 @@ async fn delete_everything(_ctx: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
+// Custom user type for #[auth] attribute test.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct CustomUser {
+    user_id: i64,
+}
+
+impl TeleportUser for CustomUser {}
+
+impl<S> FromRequestParts<S> for CustomUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or(AppError::Unauthorized)
+    }
+}
+
+#[remote(query)]
+async fn get_custom_profile(
+    _ctx: &AppState,
+    #[auth] _user: CustomUser,
+) -> Result<User, AppError<GetUserError>> {
+    Ok(User {
+        id: "custom".into(),
+        name: "Custom".into(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -107,8 +144,8 @@ fn inventory_collects_procedures() {
     let procedures: Vec<&ProcedureRegistration> =
         inventory::iter::<ProcedureRegistration>.into_iter().collect();
 
-    // We defined 7 procedures above.
-    assert_eq!(procedures.len(), 7, "expected 7 registered procedures");
+    // We defined 8 procedures above.
+    assert_eq!(procedures.len(), 8, "expected 8 registered procedures");
 }
 
 #[test]
@@ -162,6 +199,15 @@ fn router_builds_without_panic() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+#[test]
+fn auth_attribute_with_custom_user_type() {
+    let reg = find_by_fn_name("getCustomProfile");
+
+    // The procedure should be registered even though it uses a custom user type
+    // via #[auth] instead of the built-in AuthedUser.
+    assert_eq!(reg.procedure_type, ProcedureType::Query);
+}
 
 fn find_by_fn_name(name: &str) -> &'static ProcedureRegistration {
     inventory::iter::<ProcedureRegistration>

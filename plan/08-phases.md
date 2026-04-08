@@ -212,22 +212,50 @@ The export binary drops from ~65 lines to ~5. The TS error handling boilerplate 
 
 ---
 
-## Phase 7b: Polish + Validation Bridge (Future)
+## Phase 7b: DX Fixes (from DX Audit)
 
-**Goal:** Specta → Zod bridge, better DX, production readiness.
+**Goal:** Fix bugs, silent failures, and ergonomic issues identified in `12-dx-audit.md`.
 
-**Duration:** Ongoing
+**Duration:** 3-5 days
 
-### Tasks
+### Priority 1 — Bugs (fix first)
 
-- [ ] Investigate `specta-zod` for auto-generating Zod schemas from Rust types
-- [ ] Add router merging (split procedures across files)
-- [ ] Add SSE/streaming support for real-time use cases
-- [ ] Performance benchmarks (latency, throughput)
-- [ ] Security audit (input validation, CSRF, rate limiting)
-- [ ] Add request logging/middleware hooks
-- [ ] Explore binary serialization opt-in
-- [ ] Write comprehensive documentation
+- [x] B1: Fix double /rpc prefix — default `baseUrl` changed to `""` (Decision 26)
+- [x] B2: Fix void return crash — `rpc()` uses `response.text()` + conditional parse
+- [x] B3: Fix serialization swallowed — `AppError::into_response` logs failure, returns fallback JSON
+
+### Priority 2 — Critical ergonomics
+
+- [x] A2: Make AuthedUser generic — `TeleportUser` trait + `#[auth]` param attribute (Decision 24)
+- [x] A4: Add global error interceptor — `onError` callback in `RpcConfig` (Decision 25)
+- [x] A1: Add `Config::new(output_dir)` with sensible defaults
+
+### Priority 3 — Silent failure guards
+
+- [x] S1: Warn on zero procedures — stderr warning from `export_from_inventory`
+- [x] S2: Panic on missing `.state()` — clear message from `mount()`
+- [x] S3: Warn on state type mismatch — eprintln with procedure name
+- [x] A7: Hide generated handlers — `#[doc(hidden)]` already present
+
+### Priority 4 — Client polish
+
+- [x] A5: Remove Content-Type header from GET requests
+- [ ] A6: Investigate tree-shakeable exports (individual functions alongside namespace objects)
+- [ ] A3: Improve RpcResult ergonomics — better narrowing helpers or two-branch union
+
+### Future (not this phase)
+
+- [ ] M1: Scaffolding tool (`cargo teleport init`)
+- [ ] M2: Getting-started documentation
+- [ ] M3: TanStack Query / React Query adapter
+- [ ] M4: Request/response interceptors
+- [ ] M5: Request tracing / correlation IDs
+- [ ] M6: Stale bindings detection in Vite plugin
+- [ ] M7: Auto-generate barrel `index.ts`
+- [ ] Investigate `specta-zod` for auto-generating Zod schemas
+- [ ] Add SSE/streaming support
+- [ ] Performance benchmarks
+- [ ] Security audit
 - [ ] Publish crates.io + npm
 
 ---
@@ -242,7 +270,7 @@ The export binary drops from ~65 lines to ~5. The TS error handling boilerplate 
 | 4     | Done     | Auth middleware + cookie forwarding |
 | 5     | Done     | Vite plugin + dev loop              |
 | 6     | Done     | Integration examples                |
-| 7a    | Next     | DX refinement (lessons learned)     |
-| 7b    | Ongoing  | Polish, docs, validation bridge     |
+| 7a    | Done     | DX refinement (lessons learned)     |
+| 7b    | Next     | DX fixes (bugs, ergonomics, guards) |
 
-**Phases 1-6 completed.** Phase 7a addresses design issues discovered during implementation.
+**Phases 1-7a completed.** Phase 7b addresses DX issues from the audit (`12-dx-audit.md`).

@@ -96,10 +96,15 @@ where
     ///
     /// Each `#[remote]` procedure's mount function is called with a type-erased
     /// router. The state type must match what the procedures were defined with.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `.state()` was not called before `.mount()`.
+    #[allow(clippy::expect_used, clippy::print_stderr)]
     pub fn mount(self) -> Router {
-        let Some(state) = self.state else {
-            return Router::new();
-        };
+        let state = self.state.expect(
+            "TeleportRouter::mount() called without .state() — call .state(Arc::new(your_state)) before .mount()",
+        );
 
         let mut router: Box<dyn Any + Send> = Box::new(Router::<Arc<S>>::new());
 
@@ -108,8 +113,10 @@ where
             match (reg.mount_fn)(router, &path) {
                 Ok(updated) => router = updated,
                 Err(original) => {
-                    // State type mismatch — skip this registration.
-                    // This shouldn't happen when all procedures use the same state.
+                    eprintln!(
+                        "teleport-rs warning: state type mismatch for procedure '{}' — skipping",
+                        reg.name()
+                    );
                     router = original;
                 }
             }

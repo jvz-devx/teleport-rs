@@ -1,3 +1,5 @@
+import type { AppError, TransportError } from "./types";
+
 export interface RpcConfig {
   /** Base URL for RPC endpoints (e.g. "http://localhost:3000/rpc"). */
   baseUrl: string;
@@ -7,10 +9,12 @@ export interface RpcConfig {
   headers?: () => Record<string, string> | Promise<Record<string, string>>;
   /** Fetch credentials mode. Defaults to "include" to forward cookies. */
   credentials?: RequestCredentials;
+  /** Called on every RPC failure (app error or transport error). Use for global error handling like 401 → redirect. */
+  onError?: (error: { type: "app"; error: AppError<unknown> } | { type: "transport"; error: TransportError }) => void;
 }
 
 let config: RpcConfig = {
-  baseUrl: "/rpc",
+  baseUrl: "",
   timeout: 30_000,
   credentials: "include",
 };
