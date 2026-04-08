@@ -535,16 +535,10 @@ fn gen_registration(
     };
 
     let mount_fn = quote! {
-        |router_any: Box<dyn std::any::Any + Send>, path: &str|
-            -> Result<Box<dyn std::any::Any + Send>, Box<dyn std::any::Any + Send>>
-        {
-            match router_any.downcast::<axum::Router<std::sync::Arc<#state_ty>>>() {
-                Ok(router) => {
-                    let updated = router.route(path, #route_method(#handler_name));
-                    Ok(Box::new(updated))
-                }
-                Err(original) => Err(original),
-            }
+        || -> Box<dyn std::any::Any + Send> {
+            let method_router: axum::routing::MethodRouter<std::sync::Arc<#state_ty>> =
+                #route_method(#handler_name);
+            Box::new(method_router)
         }
     };
 

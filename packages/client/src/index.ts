@@ -1,3 +1,4 @@
+export { createClient, type TeleportClient } from "./client";
 export { configure, getConfig, type RpcConfig } from "./config";
 export { TeleportError, TransportFailure } from "./errors";
 export { rpc } from "./rpc";

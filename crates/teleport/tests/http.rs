@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use axum::body::Body;
+use axum::middleware as axum_mw;
 use http::{Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
@@ -596,4 +597,66 @@ async fn auth_middleware_optional_auth_without_token() {
     assert_eq!(response.status(), StatusCode::OK);
     let email: Option<String> = response_json(response).await;
     assert_eq!(email, None);
+}
+
+// ---------------------------------------------------------------------------
+// Per-route middleware via on_route
+// ---------------------------------------------------------------------------
+
+/// Middleware that adds an `X-Custom: applied` header to the response.
+async fn tag_middleware(
+    request: axum::extract::Request,
+    next: axum_mw::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert("x-custom", "applied".parse().unwrap());
+    response
+}
+
+#[tokio::test]
+async fn on_route_applies_middleware_to_matching_routes() {
+    let app = TeleportRouter::new()
+        .state(Arc::new(AppState))
+        .on_route(|path, route| {
+            if path.contains("getUser") {
+                route.layer(axum_mw::from_fn(tag_middleware))
+            } else {
+                route
+            }
+        })
+        .mount();
+
+    // Matching route gets the custom header.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.getUser?id=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("x-custom").map(|v| v.to_str().unwrap()),
+        Some("applied"),
+    );
+
+    // Non-matching route does NOT get the custom header.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/rpc/http.listUsers")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get("x-custom").is_none());
 }

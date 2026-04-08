@@ -2,7 +2,7 @@
 
 ## What
 
-teleport-rs is an end-to-end type-safe RPC layer between a Rust backend (Axum) and a TypeScript frontend (SvelteKit). It generates TypeScript client functions from Rust procedure definitions, providing a remote-function-like developer experience across the language boundary.
+teleport-rs is an end-to-end type-safe RPC layer between a Rust backend (Axum) and a TypeScript frontend. It generates TypeScript client functions from Rust procedure definitions, providing a remote-function-like developer experience across the language boundary.
 
 ## Why
 
@@ -18,10 +18,10 @@ teleport-rs fills the gap: write a Rust function, call it from TypeScript with f
 
 ## Design Principles
 
-1. **DX above all** — Syntax should feel like SvelteKit remote functions. Annotate a Rust function, call it from TS. No config files, no YAML, no proto definitions.
+1. **DX above all** — Syntax should feel like calling a local function. Annotate a Rust function, call it from TS. No config files, no YAML, no proto definitions.
 2. **Explicit over implicit** — `#[remote(query)]` vs `#[remote(command)]` is explicit intent. `snake_case` → `camelCase` is automatic but overridable.
 3. **Rust compiler as guardrail** — If it compiles, the types match across the wire. Specta ensures TypeScript mirrors Rust exactly.
-4. **SvelteKit as BFF** — The browser never calls Rust directly. All calls go through SvelteKit remote functions. This is the security boundary.
+4. **Server-side BFF** — The browser never calls Rust directly. All calls go through a server-side BFF layer (SvelteKit remote functions, Next.js Server Actions, Remix loaders, etc.). This is the security boundary.
 5. **Own the glue** — No framework lock-in. The proc macro and generator are simple enough to fork or modify.
 6. **JSON only** — No binary serialization. Debuggable in the terminal, in devtools, everywhere. Optimize later if measured.
 
@@ -30,12 +30,12 @@ teleport-rs fills the gap: write a Rust function, call it from TypeScript with f
 ```
 Browser
   │
-  │ SvelteKit remote function (data.remote.ts)
+  │ BFF server function (e.g., SvelteKit remote, Next.js Server Action)
   │ - Zod validation for UX
   │ - Cookie forwarding
   │
   ▼
-SvelteKit BFF (Node)
+BFF Layer (Node)
   │
   │ teleport-rs client (generated TS)
   │ - Type-safe RPC call
@@ -64,7 +64,7 @@ Database / Business Logic
 | Error types           | Single error enum              | `AppError<T>` with procedure-specific details |
 | Transport errors      | Mixed with app errors          | Separate transport vs application errors      |
 | Auth                  | Manual                         | Auto-forward cookies + explicit override      |
-| SvelteKit integration | None                           | Designed for remote functions                 |
+| Framework integration | None                           | Works with any TS server framework            |
 | Naming                | Rust names only                | Auto camelCase + override                     |
 | Output                | Single file                    | Split: types.ts, client.ts, errors.ts         |
 
@@ -75,7 +75,7 @@ teleport-rs consists of:
 1. **`teleport-rs`** (Rust crate) — proc macro, router generation, error types, auth middleware, Specta export
 2. **`@teleport-rs/client`** (npm package) — generated TS client with Result type, transport handling
 3. **`@teleport-rs/vite`** (npm package) — Vite plugin for auto-regeneration and HMR
-4. **Monorepo example** — Full SvelteKit + Axum demo
+4. **Monorepo example** — Full-stack demo (Axum + TypeScript frontend)
 
 ## Out of Scope (for now)
 

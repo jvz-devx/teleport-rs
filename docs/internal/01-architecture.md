@@ -7,7 +7,7 @@
 │  Monorepo                                                       │
 │                                                                 │
 │  ┌──────────────────┐         ┌────────────────────────────┐  │
-│  │  rust-server/     │         │  sveltekit-frontend/        │  │
+│  │  rust-server/     │         │  frontend/                  │  │
 │  │                   │         │                             │  │
 │  │  src/api/         │  gen    │  src/lib/api/               │  │
 │  │  ┌─────────────┐  │ ──────► │  ┌─────────────────────┐   │  │
@@ -34,9 +34,9 @@
 ### Query (read-only, GET)
 
 ```
-1. Browser calls getLikesRemote(itemId) in SvelteKit component
-2. SvelteKit remote function validates input with Zod
-3. Remote function calls generated client: getUser(itemId)
+1. Browser calls getLikesRemote(itemId) via BFF server function
+2. Server function validates input with Zod
+3. Server function calls generated client: getUser(itemId)
 4. Client serializes args, sends GET /rpc/users.getUser?id=123
 5. Axum receives request, auth middleware injects session
 6. #[remote(query)] handler runs with &AppState
@@ -50,8 +50,8 @@
 
 ```
 1. Browser calls loginRemote({ email, password })
-2. SvelteKit remote function validates with Zod
-3. Remote function calls: login({ email, password })
+2. BFF server function validates with Zod
+3. Server function calls: login({ email, password })
 4. Client serializes, sends POST /rpc/auth.login with JSON body
 5. Axum receives, auth middleware forwards cookies
 6. #[remote(command)] handler runs with &AppState
@@ -63,8 +63,8 @@
 
 ```
 1. Browser submits <form {...loginForm}>
-2. SvelteKit remote function (form type) receives FormData
-3. Remote function calls: login({ email, password })
+2. BFF server function (form type) receives FormData
+3. Server function calls: login({ email, password })
 4-8. Same as command
 9. Client returns result to remote function
 10. Remote function returns { success: true } etc.
@@ -110,7 +110,7 @@ async fn get_user_profile(...) -> ... {}
 
 ## Serialization
 
-All data between SvelteKit BFF and Rust backend is JSON, using serde for Rust and native JSON.parse/stringify for TS.
+All data between the BFF layer and Rust backend is JSON, using serde for Rust and native JSON.parse/stringify for TS.
 
 ### Rust → TS type mapping
 

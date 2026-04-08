@@ -41,7 +41,7 @@ impl ProcedureType {
     }
 }
 
-/// Type-erased mount function for procedure routing.
+/// Type-erased function that creates a procedure's `MethodRouter`.
 ///
 /// This uses `Box<dyn Any>` rather than generics because `inventory::collect!`
 /// requires a monomorphic type — it cannot collect generic items. Each procedure
@@ -49,16 +49,13 @@ impl ProcedureType {
 /// the inventory collects all procedures into a single concrete `ProcedureRegistration`
 /// type regardless of `S`.
 ///
-/// At mount time, `TeleportRouter::mount()` creates a `Router<Arc<S>>`, boxes it as
-/// `Box<dyn Any + Send>`, and passes it to each procedure's mount function. The mount
-/// function downcasts back to `Router<Arc<S>>` — if the types match, it adds the route;
-/// if not, it returns `Err` and the procedure is skipped with a warning.
+/// Returns a boxed `axum::routing::MethodRouter<Arc<S>>`. The caller
+/// (`TeleportRouter::mount()`) downcasts it back to the concrete type,
+/// optionally applies per-route middleware via an `on_route` hook, and adds
+/// it to the router.
 ///
 /// Performance: one downcast per procedure at startup. Zero cost at request time.
-pub type ErasedMountFn = fn(
-    Box<dyn Any + Send>,
-    &str,
-) -> Result<Box<dyn Any + Send>, Box<dyn Any + Send>>;
+pub type ErasedMountFn = fn() -> Box<dyn Any + Send>;
 
 /// Metadata for a registered remote procedure. Populated by `#[remote]` via
 /// `inventory::submit!` and collected at runtime by `TeleportRouter`.

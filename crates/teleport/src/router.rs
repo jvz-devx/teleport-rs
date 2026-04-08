@@ -1,11 +1,11 @@
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use axum::middleware;
 use axum::response::Json;
-use axum::routing::get;
+use axum::routing::{get, MethodRouter};
 use axum::Router;
 use serde::Serialize;
 
@@ -26,43 +26,68 @@ pub struct ManifestEntry {
     pub path: String,
 }
 
+/// Marker: state has not been provided yet.
+pub struct NoState;
+
+/// Marker: state has been provided via `.state()`.
+pub struct WithState;
+
+/// Callback type for the per-route hook set via [`TeleportRouter::on_route`].
+///
+/// Receives the route path (e.g. `"/rpc/users.getUser"`) and the
+/// [`MethodRouter`] for that procedure. Return a (possibly wrapped)
+/// `MethodRouter` — this is where you add per-procedure middleware.
+type RouteHook<S> =
+    dyn Fn(&str, MethodRouter<Arc<S>>) -> MethodRouter<Arc<S>> + Send + Sync;
+
 /// Collects all `#[remote]` procedures and builds an Axum router.
-pub struct TeleportRouter<S = ()> {
+///
+/// Uses a typestate pattern: `.mount()` and `.auth()` are only available
+/// after `.state()` has been called, turning `TeleportRouter<S, NoState>`
+/// into `TeleportRouter<S, WithState>`.
+pub struct TeleportRouter<S = (), StateMarker = NoState> {
     state: Option<Arc<S>>,
     manifest: bool,
     auth: Option<AuthConfig<S>>,
+    route_hook: Option<Arc<RouteHook<S>>>,
+    _marker: PhantomData<StateMarker>,
 }
 
-impl<S> TeleportRouter<S>
+impl<S> TeleportRouter<S, NoState>
 where
     S: Clone + Send + Sync + 'static,
 {
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             state: None,
             manifest: cfg!(feature = "debug-manifest"),
             auth: None,
+            route_hook: None,
+            _marker: PhantomData,
         }
     }
 
     /// Set the application state shared across all procedures.
-    #[must_use]
-    pub fn state(mut self, state: Arc<S>) -> Self {
-        self.state = Some(state);
-        self
-    }
-
-    /// Enable or disable the `GET /rpc/__manifest` debug endpoint.
     ///
-    /// By default, the manifest is mounted when the `debug-manifest` feature is
-    /// enabled. Call this to override that behaviour explicitly.
+    /// This transitions the router from `NoState` to `WithState`, enabling
+    /// `.mount()` and `.auth()`.
     #[must_use]
-    pub const fn manifest(mut self, enabled: bool) -> Self {
-        self.manifest = enabled;
-        self
+    pub fn state(self, state: Arc<S>) -> TeleportRouter<S, WithState> {
+        TeleportRouter {
+            state: Some(state),
+            manifest: self.manifest,
+            auth: self.auth,
+            route_hook: self.route_hook,
+            _marker: PhantomData,
+        }
     }
+}
 
+impl<S> TeleportRouter<S, WithState>
+where
+    S: Clone + Send + Sync + 'static,
+{
     /// Configure auth middleware that extracts session tokens from cookies
     /// or `Authorization: Bearer` headers and validates them into an
     /// [`AuthedUser`].
@@ -92,56 +117,87 @@ where
         self
     }
 
+    /// Register a callback that can inspect or wrap each procedure's
+    /// [`MethodRouter`] before it is added to the final Axum router.
+    ///
+    /// The callback receives the route path (e.g. `"/rpc/admin.deleteUser"`)
+    /// and the `MethodRouter` for that procedure. Return a (possibly wrapped)
+    /// `MethodRouter` — this is where you add per-procedure middleware.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use axum::middleware;
+    ///
+    /// TeleportRouter::new()
+    ///     .state(state)
+    ///     .on_route(|path, route| {
+    ///         if path.starts_with("/rpc/admin.") {
+    ///             route.layer(RateLimitLayer::new(10))
+    ///         } else {
+    ///             route
+    ///         }
+    ///     })
+    ///     .mount()
+    /// ```
+    #[must_use]
+    pub fn on_route<F>(mut self, hook: F) -> Self
+    where
+        F: Fn(&str, MethodRouter<Arc<S>>) -> MethodRouter<Arc<S>> + Send + Sync + 'static,
+    {
+        self.route_hook = Some(Arc::new(hook));
+        self
+    }
+
     /// Collect all registered procedures and build an Axum router.
     ///
     /// Uses `inventory::iter` to discover all `#[remote]` procedures registered
     /// via `inventory::submit!`. Each procedure's type-erased mount function is
-    /// called to add its route to the router.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `.state()` was not called before `.mount()`.
-    #[allow(clippy::expect_used, clippy::print_stderr)]
+    /// called to create a `MethodRouter`, which is then (optionally) passed
+    /// through the [`on_route`](Self::on_route) hook before being added to
+    /// the router.
+    #[allow(clippy::print_stderr)]
     pub fn mount(self) -> Router {
-        let state = self.state.expect(
-            "TeleportRouter::mount() called without .state() — call .state(Arc::new(your_state)) before .mount()",
-        );
+        // SAFETY: state is guaranteed to be `Some` by the typestate — only
+        // `WithState` has this method, and transitioning to `WithState`
+        // always sets `self.state = Some(...)`.
+        let state = self.state.unwrap_or_else(|| unreachable!());
 
-        let mut router: Box<dyn Any + Send> = Box::new(Router::<Arc<S>>::new());
+        let mut router = Router::<Arc<S>>::new();
 
         for reg in inventory::iter::<ProcedureRegistration> {
             let path = reg.path();
-            match (reg.mount_fn)(router, &path) {
-                Ok(updated) => router = updated,
-                Err(original) => {
-                    eprintln!(
-                        "teleport-rs warning: state type mismatch for procedure '{}' — skipping",
-                        reg.name()
-                    );
-                    router = original;
-                }
-            }
+            let method_router_any = (reg.mount_fn)();
+
+            let Some(method_router) =
+                method_router_any.downcast::<MethodRouter<Arc<S>>>().ok()
+            else {
+                eprintln!(
+                    "teleport-rs warning: state type mismatch for procedure '{}' — skipping",
+                    reg.name()
+                );
+                continue;
+            };
+
+            let method_router = match self.route_hook {
+                Some(ref hook) => hook(&path, *method_router),
+                None => *method_router,
+            };
+
+            router = router.route(&path, method_router);
         }
 
-        // Downcast back to the concrete router type and apply state.
-        let mut final_router = router.downcast::<Router<Arc<S>>>().map_or_else(
-            |_| Router::new(),
-            |typed_router| {
-                // Apply auth middleware before collapsing the state, so it
-                // wraps all procedure routes.
-                if let Some(auth) = self.auth {
-                    let mw_state = Arc::new(AuthMiddlewareState {
-                        auth,
-                        app_state: Arc::clone(&state),
-                    });
-                    typed_router
-                        .layer(middleware::from_fn_with_state(mw_state, auth_middleware))
-                        .with_state(Arc::clone(&state))
-                } else {
-                    typed_router.with_state(Arc::clone(&state))
-                }
-            },
-        );
+        let mut final_router = if let Some(auth) = self.auth {
+            let mw_state = Arc::new(AuthMiddlewareState {
+                auth,
+                app_state: Arc::clone(&state),
+            });
+            router
+                .layer(middleware::from_fn_with_state(mw_state, auth_middleware))
+                .with_state(Arc::clone(&state))
+        } else {
+            router.with_state(Arc::clone(&state))
+        };
 
         if self.manifest {
             let manifest = build_manifest();
@@ -153,8 +209,24 @@ where
     }
 }
 
+/// Methods available regardless of state.
+impl<S, St> TeleportRouter<S, St>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    /// Enable or disable the `GET /rpc/__manifest` debug endpoint.
+    ///
+    /// By default, the manifest is mounted when the `debug-manifest` feature is
+    /// enabled. Call this to override that behaviour explicitly.
+    #[must_use]
+    pub const fn manifest(mut self, enabled: bool) -> Self {
+        self.manifest = enabled;
+        self
+    }
+}
+
 #[cfg(feature = "export")]
-impl<S> TeleportRouter<S> {
+impl<S, St> TeleportRouter<S, St> {
     /// Generate TypeScript bindings from all registered procedures.
     /// Call this from your server binary during development.
     pub fn export(config: &teleport_build::Config) -> Result<(), teleport_build::GenerateError> {
@@ -163,7 +235,7 @@ impl<S> TeleportRouter<S> {
 }
 
 #[cfg(feature = "export")]
-impl<S> TeleportRouter<S>
+impl<S, St> TeleportRouter<S, St>
 where
     S: Clone + Send + Sync + 'static,
 {
@@ -179,7 +251,7 @@ where
     }
 }
 
-impl<S> Default for TeleportRouter<S>
+impl<S> Default for TeleportRouter<S, NoState>
 where
     S: Clone + Send + Sync + 'static,
 {

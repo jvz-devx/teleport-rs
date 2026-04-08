@@ -2,7 +2,7 @@
 
 ## Generated Files
 
-teleport-rs generates three files into the SvelteKit project:
+teleport-rs generates three files into the frontend project:
 
 ### `types.ts` — All input/output types from Specta
 

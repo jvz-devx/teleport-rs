@@ -68,7 +68,7 @@ type RpcResult<T, E> =
 - B: Result type (chosen) — matches Rust's `Result<T, E>`, TypeScript enforces handling
 - C: Discriminated union `{ type: 'ok' | 'error' }` — same concept, different syntax
 
-**Rationale:** Throwing is the JS convention but bad for type safety. The Result pattern forces developers to handle both success and error cases, and the compiler enforces it. This matches the SvelteKit remote function pattern where `form.result` returns similar discriminated unions. Transport vs application error separation makes debugging easier.
+**Rationale:** Throwing is the JS convention but bad for type safety. The Result pattern forces developers to handle both success and error cases, and the compiler enforces it. This matches common BFF result patterns where server functions return discriminated unions (e.g., SvelteKit's `form.result`, Next.js Server Action responses). Transport vs application error separation makes debugging easier.
 
 ---
 
@@ -108,7 +108,7 @@ async fn login(...)    // → /rpc/auth.login
 - B: Module path (chosen) — `/rpc/users.getUser`, `/rpc/auth.login`
 - C: Flat with optional prefix override
 
-**Rationale:** Namespacing prevents collisions (`users.get` vs `posts.get`), mirrors the file structure (easy to find), and produces readable client code (`users.getUser`, `auth.login`). The dot separator is chosen over slash to distinguish from REST URL paths and match the SvelteKit remote function naming pattern.
+**Rationale:** Namespacing prevents collisions (`users.get` vs `posts.get`), mirrors the file structure (easy to find), and produces readable client code (`users.getUser`, `auth.login`). The dot separator is chosen over slash to distinguish from REST URL paths and produce idiomatic method-call syntax familiar across frameworks (e.g., SvelteKit remote functions, tRPC, Remix loaders).
 
 ---
 
@@ -193,15 +193,15 @@ async fn login(...)    // → /rpc/auth.login
 
 **Decision:** Do not auto-generate Zod schemas from Rust types for now.
 
-**Rationale:** Previous experience with Zod autogeneration has been fragile and error-prone. The Specta → Zod bridge (`specta-zod`) exists but is listed as "planned" and not stable. Handwriting Zod in SvelteKit remote functions is simple, reliable, and gives full control. Revisit when `specta-zod` is production-ready.
+**Rationale:** Previous experience with Zod autogeneration has been fragile and error-prone. The Specta → Zod bridge (`specta-zod`) exists but is listed as "planned" and not stable. Handwriting Zod schemas in server-side functions (e.g., SvelteKit remote functions, Next.js Server Actions) is simple, reliable, and gives full control. Revisit when `specta-zod` is production-ready.
 
 ---
 
 ## 15. Monorepo
 
-**Decision:** Rust backend and SvelteKit frontend in the same repository.
+**Decision:** Rust backend and TypeScript frontend in the same repository.
 
-**Rationale:** Type generation from Rust → TS needs to write files into the frontend directory. A monorepo makes this trivial. Separate repos would require CI coordination, published npm packages for generated code, and cross-repo version management. For testing and documentation, having everything together is essential. The export binary writes directly to `../frontend/src/lib/api/generated/`.
+**Rationale:** Type generation from Rust → TS needs to write files into the frontend directory. A monorepo makes this trivial — regardless of framework (SvelteKit, Next.js, Remix, etc.). Separate repos would require CI coordination, published npm packages for generated code, and cross-repo version management. For testing and documentation, having everything together is essential. The export binary writes directly to the frontend's generated code directory.
 
 ---
 
