@@ -9,3 +9,5 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+teleport = { path = "../teleport" }
+inventory = { workspace = true }

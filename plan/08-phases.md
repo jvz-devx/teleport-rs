@@ -197,14 +197,14 @@ A complete, working example app that demonstrates the full integration between t
 
 ### Tasks
 
-- [ ] Eliminate `HttpMethod` duplication — have `teleport-build` depend on `teleport` directly, or create `teleport-core`
-- [ ] Add `export_from_inventory(config)` convenience function in `teleport-build`
-- [ ] Simplify `examples/demo/src/bin/export.rs` to use the one-liner
-- [ ] Add `TeleportError` class to `@teleport-rs/client` (extends Error, carries AppError)
-- [ ] Add `rpcUnwrap()` helper that throws `TeleportError` with full error detail
-- [ ] Add `mapError()` combinator for transforming errors in the result pattern
-- [ ] Simplify `examples/demo/frontend/src/lib/server/data.remote.ts` using new helpers
-- [ ] Reposition docs/examples as framework-agnostic (not SvelteKit-only)
+- [x] Eliminate `HttpMethod` duplication — `teleport-build` now depends on `teleport` directly (no circular dep)
+- [x] Add `export_from_inventory(config)` convenience function in `teleport-build`
+- [x] Simplify `examples/demo/src/bin/export.rs` (65 lines → 30 lines)
+- [x] Add `TeleportError` class to `@teleport-rs/client` (extends Error, carries AppError<E>)
+- [x] Add `rpcUnwrap()` helper that throws `TeleportError` with full error detail
+- [x] Add `mapError()` combinator for transforming errors in the result pattern
+- [x] Simplify `examples/demo/frontend/src/lib/server/data.remote.ts` using new helpers
+- [x] Reposition docs/examples as framework-agnostic (comment in data.remote.ts)
 
 ### Deliverable
 

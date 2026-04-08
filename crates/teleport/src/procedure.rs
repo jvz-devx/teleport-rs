@@ -9,6 +9,17 @@ pub enum HttpMethod {
     Post,
 }
 
+impl HttpMethod {
+    /// Return the HTTP method string (`"GET"` or `"POST"`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+        }
+    }
+}
+
 /// Semantic procedure type, mirroring `SvelteKit` conventions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcedureType {

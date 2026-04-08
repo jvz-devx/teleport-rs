@@ -6,35 +6,16 @@ pub(crate) mod ts_utils;
 pub mod typescript;
 
 pub use config::{Config, Naming, NamingCase, NamespaceStyle};
+pub use teleport::HttpMethod;
 
 use std::path::Path;
 
 use specta::ResolvedTypes;
 use specta::datatype::DataType;
 
-/// HTTP method for a remote procedure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HttpMethod {
-    Get,
-    Post,
-}
-
-impl HttpMethod {
-    /// Return the HTTP method string (`"GET"` or `"POST"`).
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Get => "GET",
-            Self::Post => "POST",
-        }
-    }
-}
-
-/// Metadata for a single procedure, passed from the export binary to the
-/// generator. This is a lightweight, owned mirror of `ProcedureRegistration`
-/// that avoids a dependency on the `teleport` crate.
+/// Metadata for a single procedure used internally by the generator.
 #[derive(Debug, Clone)]
-pub struct ProcedureInfo {
+pub(crate) struct ProcedureInfo {
     /// Fully qualified name, e.g. `"users.getUser"`.
     pub name: String,
     /// HTTP method derived from the procedure type.
@@ -51,6 +32,35 @@ pub struct ProcedureInfo {
     pub error_type: DataType,
 }
 
+/// One-liner for export binaries: collects all `#[remote]` procedures and generates TypeScript.
+///
+/// Replaces the manual `ProcedureInfo` construction boilerplate by iterating
+/// `inventory` registrations, resolving types, and writing output files.
+///
+/// # Errors
+///
+/// Returns an error if type resolution or file writing fails.
+pub fn export_from_inventory(config: &Config) -> Result<(), GenerateError> {
+    let mut types = specta::Types::default();
+    let mut procedures = Vec::new();
+
+    for reg in inventory::iter::<teleport::ProcedureRegistration> {
+        let info = ProcedureInfo {
+            name: reg.name(),
+            method: reg.method,
+            path: reg.path(),
+            doc: reg.doc.to_owned(),
+            input_type: (reg.input_type)(&mut types),
+            output_type: (reg.output_type)(&mut types),
+            error_type: (reg.error_type)(&mut types),
+        };
+        procedures.push(info);
+    }
+
+    let resolved = specta::ResolvedTypes::from_resolved_types(types);
+    generate(config, &procedures, &resolved)
+}
+
 /// Generate TypeScript bindings from collected procedure metadata.
 ///
 /// Writes three files to `config.output_dir`:
@@ -64,7 +74,7 @@ pub struct ProcedureInfo {
 /// # Errors
 ///
 /// Returns an error if the output directory cannot be created or files cannot be written.
-pub fn generate(
+fn generate(
     config: &Config,
     procedures: &[ProcedureInfo],
     resolved_types: &ResolvedTypes,

@@ -1,16 +1,14 @@
 //! Integration test: full export pipeline.
 //!
 //! Defines procedures with `#[remote]`, collects them via `inventory`,
-//! converts to `ProcedureInfo`, runs `teleport_build::generate`, and
-//! verifies the generated TypeScript files.
+//! and verifies the generated TypeScript files using `export_from_inventory`.
 
 #![allow(clippy::expect_used)]
 
 use std::sync::Arc;
 
-use specta::{ResolvedTypes, Types};
-use teleport::{remote, teleport_type, AppError, ProcedureRegistration, TeleportRouter};
-use teleport_build::{Config, HttpMethod as BuildHttpMethod, Naming, NamespaceStyle, ProcedureInfo};
+use teleport::{remote, teleport_type, AppError, TeleportRouter};
+use teleport_build::{Config, Naming, NamespaceStyle};
 
 // ---------------------------------------------------------------------------
 // Test types
@@ -74,37 +72,6 @@ async fn list_users(_ctx: &TestState) -> Result<Vec<User>, AppError> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Convert `teleport::HttpMethod` to `teleport_build::HttpMethod`.
-fn convert_method(method: teleport::HttpMethod) -> BuildHttpMethod {
-    match method {
-        teleport::HttpMethod::Get => BuildHttpMethod::Get,
-        teleport::HttpMethod::Post => BuildHttpMethod::Post,
-    }
-}
-
-/// Collect all registered procedures into `ProcedureInfo` values and a shared
-/// `Types` collection, then resolve the types.
-fn collect_procedures() -> (Vec<ProcedureInfo>, ResolvedTypes) {
-    let mut types = Types::default();
-    let mut procedures = Vec::new();
-
-    for reg in inventory::iter::<ProcedureRegistration> {
-        let info = ProcedureInfo {
-            name: reg.name(),
-            method: convert_method(reg.method),
-            path: reg.path(),
-            doc: reg.doc.to_owned(),
-            input_type: (reg.input_type)(&mut types),
-            output_type: (reg.output_type)(&mut types),
-            error_type: (reg.error_type)(&mut types),
-        };
-        procedures.push(info);
-    }
-
-    let resolved = ResolvedTypes::from_resolved_types(types);
-    (procedures, resolved)
-}
-
 fn test_config(output_dir: std::path::PathBuf) -> Config {
     Config {
         output_dir,
@@ -123,10 +90,9 @@ fn test_config(output_dir: std::path::PathBuf) -> Config {
 #[test]
 fn full_pipeline_generates_ts_files() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
-    let (procedures, resolved) = collect_procedures();
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::generate(&config, &procedures, &resolved)
+    teleport_build::export_from_inventory(&config)
         .expect("generation should succeed");
 
     let types_ts = std::fs::read_to_string(tmp.path().join("types.ts"))
@@ -187,10 +153,9 @@ fn full_pipeline_generates_ts_files() {
 #[test]
 fn generated_client_has_correct_methods() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
-    let (procedures, resolved) = collect_procedures();
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::generate(&config, &procedures, &resolved)
+    teleport_build::export_from_inventory(&config)
         .expect("generation should succeed");
 
     let client_ts = std::fs::read_to_string(tmp.path().join("client.ts"))
@@ -224,10 +189,9 @@ fn generated_client_has_correct_methods() {
 #[test]
 fn generated_errors_has_procedure_specific_aliases() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
-    let (procedures, resolved) = collect_procedures();
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::generate(&config, &procedures, &resolved)
+    teleport_build::export_from_inventory(&config)
         .expect("generation should succeed");
 
     let errors_ts = std::fs::read_to_string(tmp.path().join("errors.ts"))
@@ -255,17 +219,16 @@ fn router_mounts_collected_procedures() {
 #[test]
 fn idempotent_generation() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
-    let (procedures, resolved) = collect_procedures();
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::generate(&config, &procedures, &resolved)
+    teleport_build::export_from_inventory(&config)
         .expect("first generation should succeed");
 
     let types_first = std::fs::read_to_string(tmp.path().join("types.ts"))
         .expect("types.ts should exist");
 
     // Run generation again — files should not change.
-    teleport_build::generate(&config, &procedures, &resolved)
+    teleport_build::export_from_inventory(&config)
         .expect("second generation should succeed");
 
     let types_second = std::fs::read_to_string(tmp.path().join("types.ts"))

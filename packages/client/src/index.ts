@@ -1,6 +1,13 @@
 export { configure, getConfig, type RpcConfig } from "./config";
+export { TeleportError, TransportFailure } from "./errors";
 export { rpc } from "./rpc";
-export { isAppError, isTransportError, unwrap } from "./result";
+export {
+  isAppError,
+  isTransportError,
+  mapError,
+  rpcUnwrap,
+  unwrap,
+} from "./result";
 export type {
   AppError,
   HttpMethod,

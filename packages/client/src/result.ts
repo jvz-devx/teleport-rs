@@ -1,3 +1,4 @@
+import { TeleportError, TransportFailure } from "./errors";
 import type { AppError, RpcResult, TransportError } from "./types";
 
 /** Type guard: is this a transport-level error? */
@@ -17,15 +18,35 @@ export function isAppError<T, E>(
 /**
  * Unwrap a successful result or throw.
  *
- * Useful when you've already handled errors and want to extract the data,
- * or in contexts where throwing is acceptable (e.g. SvelteKit load functions).
+ * @deprecated Use `rpcUnwrap()` instead, which throws typed errors.
  */
 export function unwrap<T, E>(result: RpcResult<T, E>): T {
+  return rpcUnwrap(result);
+}
+
+/**
+ * Unwrap a successful result or throw a typed error.
+ *
+ * - Transport errors throw `TransportFailure`
+ * - Application errors throw `TeleportError` (preserving the full `AppError<E>`)
+ *
+ * Use in SvelteKit remote functions or any context where throwing is acceptable.
+ */
+export function rpcUnwrap<T, E>(result: RpcResult<T, E>): T {
   if (result.ok) return result.data;
-  if ("transport" in result) {
-    const t = result.transport;
-    const msg = "message" in t ? t.message : `Server error ${t.status}`;
-    throw new Error(msg);
-  }
-  throw new Error(result.error.type);
+  if ("transport" in result) throw new TransportFailure(result.transport);
+  throw new TeleportError(result.error);
+}
+
+/**
+ * Extract data from a successful result, or transform the error.
+ * Transport errors still throw `TransportFailure`.
+ */
+export function mapError<T, E, R>(
+  result: RpcResult<T, E>,
+  handler: (error: AppError<E>) => R,
+): T | R {
+  if (result.ok) return result.data;
+  if ("transport" in result) throw new TransportFailure(result.transport);
+  return handler(result.error);
 }

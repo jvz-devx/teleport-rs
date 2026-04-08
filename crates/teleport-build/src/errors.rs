@@ -38,7 +38,7 @@ export type RpcResult<T, E = never> =
 /// Outputs the hardcoded `AppError`, `TransportError`, and `RpcResult` types,
 /// followed by procedure-specific error type aliases for any procedure whose
 /// error detail type is not `never`.
-pub fn generate_errors(
+pub(crate) fn generate_errors(
     procedures: &[ProcedureInfo],
     resolved_types: &ResolvedTypes,
 ) -> Result<String, GenerateError> {
