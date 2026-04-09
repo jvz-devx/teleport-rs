@@ -1,0 +1,13 @@
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+.svelte-kit/
+
+# Generated bindings
+**/generated/
+
+# OS
+.DS_Store

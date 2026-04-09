@@ -1,0 +1,47 @@
+# cargo-deny configuration. See: https://embarkstudios.github.io/cargo-deny/
+# Run with: `cargo deny --all-features check`
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+# Ignore specific advisories here with a justification comment, e.g.:
+# ignore = [
+#     { id = "RUSTSEC-YYYY-NNNN", reason = "only affects platform X, we don't ship there" },
+# ]
+ignore = []
+
+[licenses]
+version = 2
+# Permissive licenses only. MPL-2.0 is included because several transitive
+# deps use it; file-level copyleft is acceptable for library distribution.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+# Wildcards are denied for published deps but allowed for path deps
+# (workspace-internal crates use `path = "..."` without a version).
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

@@ -1,0 +1,15 @@
+[package]
+name = "teleport-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Shared types for teleport-rs — used by both the runtime and the build-time codegen."
+readme = "../../README.md"
+
+[dependencies]
+specta = { workspace = true }
+inventory = { workspace = true }

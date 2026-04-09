@@ -1,0 +1,8 @@
+error[E0599]: no method named `mount` found for struct `TeleportRouter<AppState>` in the current scope
+  --> tests/compile-fail/mount_without_state.rs:12:20
+   |
+12 |     let _ = router.mount();
+   |                    ^^^^^ method not found in `TeleportRouter<AppState>`
+   |
+   = note: the method was found for
+           - `TeleportRouter<S, WithState>`

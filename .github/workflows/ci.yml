@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# Cancel stale runs on PRs; always let master finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Default to least-privilege; individual jobs can add more if needed.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain with rustfmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --all --check
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain with clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install bun (hoists tsc into node_modules/.bin for the snapshot check)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile
+      - name: cargo test --workspace --all-features
+        # The teleport-build snapshot test requires `tsc` and hard-fails
+        # if it's missing. `bun install` above guarantees it's present.
+        run: cargo test --workspace --all-features
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc (warnings as errors)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --all-features --no-deps
+
+  msrv:
+    name: msrv (Rust 1.93)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93"
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check against declared MSRV
+        run: cargo check --workspace --all-features
+
+  typescript:
+    name: typescript
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile
+      - name: Type-check @teleport-rs/client
+        run: bunx tsc --noEmit -p packages/client/tsconfig.json
+      - name: Type-check @teleport-rs/vite
+        run: bunx tsc --noEmit -p packages/vite/tsconfig.json
+      - name: Run @teleport-rs/client unit tests
+        working-directory: packages/client
+        run: bun test
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: cargo deny check
+        run: cargo deny --all-features check
+
+  # Status gate for branch protection: require this single job to succeed
+  # in the repo settings, and it will transitively require every job above.
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - fmt
+      - clippy
+      - test
+      - docs
+      - msrv
+      - typescript
+      - deny
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          jobs='${{ toJSON(needs) }}'
+          echo "$jobs"
+          echo "$jobs" | jq -e 'to_entries | all(.value.result == "success")' > /dev/null

@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Rust workspace deps
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      cargo-patch-and-minor:
+        update-types: [minor, patch]
+
+  # GitHub Actions — keep action pins fresh
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]

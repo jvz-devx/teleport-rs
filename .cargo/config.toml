@@ -1,0 +1,41 @@
+[target.'cfg(all())']
+rustflags = [
+    # ── pedantic baseline ──
+    "-Wclippy::pedantic",
+
+    # ── nursery picks (stable enough to enforce) ──
+    "-Wclippy::nursery",
+
+    # ── restriction picks (opt-in, high-value) ──
+    "-Wclippy::unwrap_used",
+    "-Wclippy::expect_used",
+    "-Wclippy::panic",
+    "-Wclippy::unimplemented",
+    "-Wclippy::todo",
+    "-Wclippy::dbg_macro",
+    "-Wclippy::print_stdout",
+    "-Wclippy::print_stderr",
+    "-Wclippy::clone_on_ref_ptr",
+    "-Wclippy::rc_buffer",
+    "-Wclippy::rc_mutex",
+    # string_to_string removed — implicit_clone covers it
+    "-Wclippy::str_to_string",
+    "-Wclippy::float_cmp_const",
+    "-Wclippy::lossy_float_literal",
+    "-Wclippy::verbose_file_reads",
+    "-Wclippy::rest_pat_in_fully_bound_structs",
+    "-Wclippy::self_named_module_files",
+    "-Wclippy::empty_structs_with_brackets",
+    "-Wclippy::unseparated_literal_suffix",
+    "-Wclippy::fn_to_numeric_cast_any",
+    "-Wclippy::try_err",
+    "-Wclippy::semicolon_outside_block",
+    "-Wclippy::redundant_type_annotations",
+    "-Wclippy::infinite_loop",
+
+    # ── pedantic relaxations (too noisy for this project) ──
+    "-Aclippy::module_name_repetitions",
+    "-Aclippy::must_use_candidate",
+    "-Aclippy::missing_errors_doc",
+    "-Aclippy::missing_panics_doc",
+]
