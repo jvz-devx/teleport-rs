@@ -12,6 +12,8 @@
 
 /// Auth middleware configuration and helpers.
 pub mod auth;
+#[doc(hidden)]
+pub mod bigint;
 /// Framework error type [`AppError`] and its HTTP response mapping.
 pub mod error;
 /// Axum extractors used by generated procedure handlers.

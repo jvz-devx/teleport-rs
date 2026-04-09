@@ -58,6 +58,17 @@ pub(crate) fn generate_client(
             output_ts
         };
 
+        // Procedures with no typed error detail have `AppError<()>`, which
+        // `datatype_to_ts` renders as `null`. That's technically a value
+        // (nullable) — semantically wrong for "there is no detail type".
+        // Rewrite to `never` so the TS type `Promise<RpcResult<T, never>>`
+        // correctly expresses "the error variant carries no detail".
+        let error_ts = if is_unit_type(&error_ts) {
+            "never".to_owned()
+        } else {
+            error_ts
+        };
+
         let is_void_input = is_unit_type(&input_ts);
 
         namespaces

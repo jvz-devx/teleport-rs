@@ -9,7 +9,7 @@ import type { RpcResult } from "@teleport-rs/client";
 import type { SnapshotCreateUserError, SnapshotCreateUserInput, SnapshotUser, SnapshotUserId } from "./types";
 
 /** GET /rpc/health.check */
-export function health_check(): Promise<RpcResult<void, null>> {
+export function health_check(): Promise<RpcResult<void, never>> {
   return rpc("GET", "/rpc/health.check", undefined);
 }
 
@@ -25,7 +25,7 @@ export function users_createUser(input: SnapshotCreateUserInput): Promise<RpcRes
  * Look up a user by their ID.
  * GET /rpc/users.getUser
  */
-export function users_getUser(input: SnapshotUserId): Promise<RpcResult<SnapshotUser, null>> {
+export function users_getUser(input: SnapshotUserId): Promise<RpcResult<SnapshotUser, never>> {
   return rpc("GET", "/rpc/users.getUser", input);
 }
 

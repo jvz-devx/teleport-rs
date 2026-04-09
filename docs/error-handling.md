@@ -115,19 +115,17 @@ async fn login(
 ```
 
 Only one `T` is supported per procedure. If you need to distinguish
-several failure modes, **use boolean flags on a struct like the example
-above** — do NOT use a Rust enum with struct variants. See the next
-section for why.
+several failure modes, you can model `T` as either an enum with
+variant-specific fields (see below) or a flat struct with boolean
+flags. Both patterns are supported.
 
-### Detail type constraints — avoid enums with struct variants
+### Enum error details (discriminated unions)
 
-> ⚠️ **Known limitation**: the most natural-looking error detail type —
-> a Rust enum with variant-specific fields — does not round-trip
-> correctly through the TypeScript client in 0.1.x. Use a flat struct
-> instead. This is an upstream `specta-typescript` 0.0.11 bug, not a
-> teleport-rs bug, and we cannot fix it in this codebase.
-
-**What breaks.** Given a typical typed error:
+Rust enums with struct or tuple variants are fully supported as typed
+error detail types. teleport-rs post-processes `specta-typescript`'s
+enum rendering to emit the correct externally-tagged TypeScript shape,
+preserving variant names and the nesting level that matches serde's
+wire format.
 
 ```rust,ignore
 #[teleport_type]
@@ -136,46 +134,6 @@ pub enum CreateLinkError {
     SlugInvalid { reason: String },
     UrlInvalid { reason: String },
 }
-```
-
-The Rust wire format (serde default, externally tagged) is:
-
-```json
-{"type":"Detail","detail":{"SlugInvalid":{"reason":"..."}}}
-```
-
-But the generated TypeScript is:
-
-```typescript
-export type CreateLinkError = "SlugTaken" | { reason: string };
-```
-
-Three things go wrong simultaneously:
-
-1. **Variant names are collapsed.** `SlugInvalid` and `UrlInvalid` both
-   become `{ reason: string }`. The client has no way to tell which
-   variant fired.
-2. **The nesting level is wrong.** The wire format wraps the fields in
-   `{"SlugInvalid": {...}}`, but the TS type says `{reason: ...}` is the
-   outer shape. At runtime, `result.error.detail.reason` is `undefined`.
-3. **`tsc` passes.** The broken type matches the broken access pattern
-   syntactically, so the compile check greenlights unsound code. You
-   discover the bug in production when a null check silently mis-routes.
-
-`#[serde(tag = "kind")]` does **not** help. Adding it to the Rust enum
-changes the JSON wire format (verified), but the generated TypeScript
-is byte-identical to the untagged version — `specta-typescript` 0.0.11
-ignores the attribute entirely. There is no serde-level escape hatch.
-
-**What works: flat struct with boolean/Option fields.**
-
-```rust,ignore
-#[teleport_type]
-pub struct CreateLinkError {
-    pub slug_taken: bool,
-    pub slug_invalid: Option<String>,  // Some(reason) when applicable
-    pub url_invalid: Option<String>,
-}
 
 #[remote(command)]
 async fn create_link(
@@ -183,59 +141,96 @@ async fn create_link(
     input: CreateLinkInput,
 ) -> Result<ShortLink, AppError<CreateLinkError>> {
     if ctx.slug_exists(&input.slug).await {
-        return Err(AppError::detail(CreateLinkError {
-            slug_taken: true,
-            slug_invalid: None,
-            url_invalid: None,
+        return Err(AppError::detail(CreateLinkError::SlugTaken));
+    }
+    if !input.slug.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(AppError::detail(CreateLinkError::SlugInvalid {
+            reason: "only alphanumerics allowed".into(),
         }));
     }
-    // …
+    // ...
     # unreachable!()
 }
 ```
 
-TypeScript consumers narrow with plain boolean / null checks:
+The wire format (serde default, externally tagged):
+
+```json
+{"type":"Detail","detail":"SlugTaken"}
+{"type":"Detail","detail":{"SlugInvalid":{"reason":"only alphanumerics allowed"}}}
+```
+
+The generated TypeScript:
+
+```typescript
+export type CreateLinkError =
+    | "SlugTaken"
+    | { SlugInvalid: { reason: string } }
+    | { UrlInvalid: { reason: string } };
+```
+
+TypeScript consumers narrow by checking for the variant name key:
 
 ```typescript
 if (result.error.type === "Detail") {
-    if (result.error.detail.slug_taken) {
+    const detail = result.error.detail;
+    if (detail === "SlugTaken") {
         showSlugTakenError();
-    } else if (result.error.detail.slug_invalid !== null) {
-        showSlugInvalidError(result.error.detail.slug_invalid);
-    } else if (result.error.detail.url_invalid !== null) {
-        showUrlInvalidError(result.error.detail.url_invalid);
+    } else if ("SlugInvalid" in detail) {
+        showSlugInvalidError(detail.SlugInvalid.reason);
+    } else if ("UrlInvalid" in detail) {
+        showUrlInvalidError(detail.UrlInvalid.reason);
     }
 }
 ```
 
-Less elegant than a discriminated union, but **it works today** and
-`tsc` catches the usual typos.
+The `"X" in detail` key check is the correct narrowing pattern for
+externally-tagged discriminated unions — each variant object has the
+variant name as its single key, so `in` both proves the variant AND
+gives TypeScript enough information to type the contents.
 
-**What also works: unit-only enums.** Enums with no fielded variants
-render cleanly as a TypeScript string literal union, because each
-variant serialises as a bare string:
+#### `#[serde(tag = "...")]` is not supported
+
+Adding `#[serde(tag = "kind")]` to a `#[teleport_type]` enum changes the
+Rust wire format to internally-tagged
+`{"kind":"SlugInvalid","reason":"..."}`, but `specta-typescript` 0.0.11
+does not expose that attribute to its renderer. teleport-rs cannot
+detect the intent and always renders externally-tagged, regardless of
+the serde attribute. If you set `#[serde(tag)]` on a
+`#[teleport_type]` enum, the Rust wire format and the generated
+TypeScript type will diverge. Don't do it. If you need internal
+tagging, use a flat struct with an enum-valued `kind: Reason` field
+where `Reason` is a unit-only enum (which renders cleanly as a TS
+string literal union).
+
+### Flat struct error details (alternative)
+
+If you prefer a flat struct to an enum for any reason — simpler client
+narrowing, multiple simultaneous flags, easier to extend without
+breaking — that pattern still works:
 
 ```rust,ignore
 #[teleport_type]
-pub enum Reason {
-    SlugTaken,
-    InvalidSlug,
-    InvalidUrl,
-    RateLimited,
+pub struct CreateLinkError {
+    pub slug_taken: bool,
+    pub slug_invalid: Option<String>,
+    pub url_invalid: Option<String>,
 }
-// → export type Reason = "SlugTaken" | "InvalidSlug" | "InvalidUrl" | "RateLimited";
 ```
 
-Use this if all you need is a closed set of reason codes with no
-extra payload.
+TypeScript side:
 
-**Tracking.** This is an upstream `specta-typescript` 0.0.11 issue.
-We are considering filing it formally; there is currently no public
-tracking URL. Regression tests locking in the current broken behavior
-live at `crates/teleport-build/tests/data_types.rs` — look for the
-`#[ignore]`-annotated tests. When the upstream bug is fixed, those
-tests will start failing, which is the signal to update this section
-and un-ignore the tests.
+```typescript
+if (result.error.type === "Detail") {
+    if (result.error.detail.slug_taken) showSlugTakenError();
+    else if (result.error.detail.slug_invalid !== null) {
+        showSlugInvalidError(result.error.detail.slug_invalid);
+    }
+}
+```
+
+Both patterns are first-class — pick whichever matches your error
+vocabulary better.
 
 Procedures that do not need typed details keep the default and use
 `AppError` (i.e. `AppError<()>`):
@@ -347,6 +342,23 @@ carry structured information (e.g. `{ "locked_until": "2026-01-01" }`)
 that the client can render directly. The `E` parameter of the
 middleware is a fresh generic — it does not have to match any
 particular procedure's error type.
+
+> ⚠️ **Typed `Detail` from `try_auth` is not type-safe on the TypeScript
+> side.** The auth middleware short-circuits with an `AppError<E>`
+> response where `E` is whatever you chose at `.try_auth(...)` time,
+> but each procedure's generated TS client narrows the error branch as
+> `AppError<ProcError>` — where `ProcError` is that procedure's own
+> detail type. If you return a typed auth `Detail`, the TS client will
+> silently attempt to decode it as the procedure's detail type, and
+> may produce `undefined` fields at runtime even though `tsc` is happy.
+>
+> **Recommended**: only use `Err(AppError::<()>::Unauthorized)` or
+> `Err(AppError::<()>::Forbidden)` from `try_auth` validators. Either
+> of those serialises to `{"type":"Unauthorized"}` or
+> `{"type":"Forbidden"}` — the variant tag is procedure-independent
+> and narrows safely in every client-side match. If you need
+> structured auth rejection data, put it in a cookie or a separate
+> `/auth/status` procedure that every client polls after a 401/403.
 
 If *no* token is present in the request at all, `try_auth` still passes
 through without calling the validator. The "no auth attempted" case is

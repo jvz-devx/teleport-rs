@@ -731,7 +731,7 @@ fn enum_as_field_renders_correctly() {
 fn bug1_vec_as_toplevel_return_renders_as_array() {
     let (_tmp, _types_ts, client_ts) = generate_all();
     assert!(
-        client_ts.contains("Promise<RpcResult<VecItem[], null>>"),
+        client_ts.contains("Promise<RpcResult<VecItem[], never>>"),
         "Vec<VecItem> as return type must render as VecItem[], not Vec<VecItem>\n--- client.ts ---\n{client_ts}",
     );
 }
@@ -755,7 +755,7 @@ fn bug1_vec_does_not_leak_into_type_imports() {
 fn bug2_string_as_toplevel_return_renders_as_lowercase_string() {
     let (_tmp, _types_ts, client_ts) = generate_all();
     assert!(
-        client_ts.contains("Promise<RpcResult<string, null>>"),
+        client_ts.contains("Promise<RpcResult<string, never>>"),
         "String as return type must render as lowercase `string`\n--- client.ts ---\n{client_ts}",
     );
 }
@@ -794,64 +794,78 @@ fn bug3_bigint_rewrite_applies_to_all_six_primitives() {
 fn nested_vec_nested_vec_renders_as_nested_array() {
     let (_tmp, _types_ts, client_ts) = generate_all();
     assert!(
-        client_ts.contains("Promise<RpcResult<string[][], null>>"),
+        client_ts.contains("Promise<RpcResult<string[][], never>>"),
         "Vec<Vec<String>> should render as `string[][]`\n--- client.ts ---\n{client_ts}",
     );
 }
 
 // ---------------------------------------------------------------------------
-// Known upstream bug regression tests
+// Enum-with-struct-variants rendering
 // ---------------------------------------------------------------------------
 //
-// These tests document the CURRENT BROKEN behavior of
-// `specta-typescript` 0.0.11 when rendering Rust enums with struct
-// variants. They are `#[ignore]` so they don't fail CI, but they can be
-// run on demand with:
+// `specta-typescript` 0.0.11's legacy enum renderer collapses struct
+// variant names and drops the outer variant tag — its corrected
+// externally-tagged path is commented out in the upstream crate. The
+// `teleport-build` post-processor in `typescript::rewrite_enums_with_struct_variants`
+// walks the resolved type collection and replaces broken enum blocks
+// with the correct shape before the file is written.
 //
-//     cargo test -p teleport-build --test data_types -- --ignored
-//
-// If specta ever fixes the upstream bug, these tests will FAIL and that
-// is the signal to:
-//   1. Update `docs/error-handling.md` to remove the workaround note
-//   2. Un-ignore the tests
-//   3. Rewrite the assertions to match the new (correct) behavior
-//
-// See `docs/error-handling.md` §"Detail type constraints" for the
-// user-facing workaround.
+// These tests lock in the corrected behavior. If specta ever unfucks
+// its own rendering, the tests will keep passing (the post-processor
+// still produces the same shape). If somebody accidentally breaks the
+// post-processor, they fail loudly.
 
 #[test]
-#[ignore = "documents upstream specta-typescript bug — see docs/error-handling.md"]
-fn enum_with_struct_variants_collapses_to_single_shape() {
+fn enum_with_struct_variants_renders_externally_tagged() {
     let (_tmp, types_ts, _) = generate_all();
-    // Current broken output: variant names collapsed, nesting level wrong.
-    // Both `SlugInvalid { reason }` and `UrlInvalid { reason }` become the
-    // same `{ reason: string }`, and the outer tag is dropped entirely.
+    // The post-processor should emit:
+    //     export type KnownBugEnum =
+    //         | "SlugTaken"
+    //         | { SlugInvalid: { reason: string } }
+    //         | { UrlInvalid: { reason: string } };
     assert!(
-        types_ts.contains(r#"export type KnownBugEnum = "SlugTaken" | { reason: string };"#),
-        "upstream bug changed shape — please update this test and the docs\n--- types.ts ---\n{types_ts}",
+        types_ts.contains(r#""SlugTaken""#),
+        "unit variant should render as string literal\n--- types.ts ---\n{types_ts}",
+    );
+    assert!(
+        types_ts.contains(r"{ SlugInvalid: { reason: string } }"),
+        "SlugInvalid variant should keep its name and the field nesting\n--- types.ts ---\n{types_ts}",
+    );
+    assert!(
+        types_ts.contains(r"{ UrlInvalid: { reason: string } }"),
+        "UrlInvalid must be distinguishable from SlugInvalid\n--- types.ts ---\n{types_ts}",
+    );
+    // Both variants must exist simultaneously — not collapsed into a
+    // single `{ reason: string }`.
+    let slug_count = types_ts.matches("SlugInvalid").count();
+    let url_count = types_ts.matches("UrlInvalid").count();
+    assert!(
+        slug_count >= 1 && url_count >= 1,
+        "variants must not be collapsed\n--- types.ts ---\n{types_ts}",
     );
 }
 
 #[test]
-#[ignore = "documents upstream specta-typescript bug — serde(tag) ignored"]
-fn serde_tag_attribute_is_silently_ignored_by_specta_typescript() {
+fn enum_with_serde_tag_still_renders_externally_tagged() {
+    // `#[serde(tag = "kind")]` changes the Rust wire format to
+    // internally-tagged `{"kind": "SlugInvalid", "reason": "..."}`, but
+    // specta-typescript 0.0.11 does not expose the attribute to its
+    // renderer. Our post-processor therefore can't detect the intent
+    // and renders externally-tagged regardless. Users who need
+    // internally-tagged must not use `#[serde(tag)]` on a
+    // `#[teleport_type]` enum — the flat-struct workaround is the only
+    // reliable approach for internally-tagged detail shapes.
+    //
+    // This test documents the current behaviour so future contributors
+    // know the limitation is deliberate.
     let (_tmp, types_ts, _) = generate_all();
-    // Adding `#[serde(tag = "kind")]` changes the Rust wire format (verified
-    // separately via serde_json), but specta-typescript generates
-    // byte-identical TS to the externally-tagged form. The `kind`
-    // discriminator never appears.
     assert!(
-        types_ts.contains(r#"export type KnownBugTaggedEnum = "SlugTaken" | { reason: string };"#),
-        "upstream bug may be fixed — #[serde(tag)] is now respected?\n--- types.ts ---\n{types_ts}",
+        types_ts.contains(r"export type KnownBugTaggedEnum ="),
+        "KnownBugTaggedEnum should be emitted\n--- types.ts ---\n{types_ts}",
     );
-    // Double-check: the generated TS must NOT contain a `kind` field at all.
-    let tagged_section = types_ts
-        .lines()
-        .find(|l| l.contains("KnownBugTaggedEnum"))
-        .unwrap_or("");
     assert!(
-        !tagged_section.contains("kind"),
-        "the TS includes a `kind` field — upstream may be partially fixed\n--- line ---\n{tagged_section}",
+        types_ts.contains(r"{ SlugInvalid: { reason: string } }"),
+        "post-processor renders externally-tagged regardless of serde(tag)\n--- types.ts ---\n{types_ts}",
     );
 }
 

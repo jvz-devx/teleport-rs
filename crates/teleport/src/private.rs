@@ -1,8 +1,10 @@
 // Internal module for macro-generated code. Not part of the public API.
 //
-// The `#[remote]` proc macro generates code that references types from this
-// module. End users should never import from here.
+// The `#[remote]` and `#[teleport_type]` proc macros generate code that
+// references types from this module. End users should never import from
+// here.
 
+pub use crate::bigint;
 pub use crate::procedure::{ErasedMountFn, HttpMethod, ProcedureRegistration, ProcedureType};
 pub use inventory;
 

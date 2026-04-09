@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **i64 runtime type mismatch closed.** 0.1.1 changed the generated
+  TypeScript type for 64-bit integer fields to `string`, but the Rust
+  side still emitted JSON numbers — a type lie that `tsc` couldn't
+  catch. The `#[teleport_type]` proc macro now walks struct/enum fields
+  and auto-injects `#[serde(with = "::teleport::bigint::…_as_string")]`
+  on every `i64` / `u64` / `i128` / `u128` / `isize` / `usize` (and
+  `Option<_>` of any of those) so the Rust wire format is now a JSON
+  string matching the generated TS type. Runtime and type agree in
+  both directions for all values.
+- **Bare 64-bit integer return types are rejected at macro time with
+  a clear error** pointing users at the struct-wrapper pattern. The
+  serde-attribute fix only reaches struct fields, and bare primitive
+  returns would silently produce a runtime mismatch otherwise.
+- **Enum `AppError::Detail<T>` with struct variants now renders the
+  correct externally-tagged TypeScript.** 0.1.1 documented this as
+  a known upstream `specta-typescript` limitation. teleport-build now
+  post-processes the generated `types.ts`, walks the resolved type
+  collection for enums with non-unit variants, and replaces the broken
+  `"A" | { reason: string }` collapsed form with the correct
+  `"A" | { SlugInvalid: { reason: string } } | { UrlInvalid: { reason: string } }`
+  shape. Variant names are preserved, the nesting matches serde's
+  external-tag wire format, and TypeScript narrowing via `"X" in detail`
+  works.
+
+### Added
+
+- `teleport::bigint` module (doc-hidden) with serde `serialize` /
+  `deserialize` helpers for every 64-bit integer type and its
+  `Option<_>` wrapper. End users don't import from it directly — it
+  exists as a stable path for the macro-generated
+  `#[serde(with = "…")]` attributes.
+- `teleport-build::typescript::rewrite_enums_with_struct_variants` —
+  post-processor that walks the resolved type collection and replaces
+  every enum with a non-unit variant with the correct externally-tagged
+  TypeScript rendering, bypassing the commented-out code in
+  `specta-typescript` 0.0.11's legacy enum renderer.
+- 1 new compile-fail test (`bare_bigint_return`) covering the macro
+  rejection of bare 64-bit integer returns.
+- Two positive tests in `crates/teleport-build/tests/data_types.rs`
+  locking in the corrected enum rendering (they replace the two
+  `#[ignore]`-annotated tests from 0.1.1 that documented the broken
+  behaviour).
+
+### Changed
+
+- `docs/error-handling.md` §"Typed error details" rewritten: enum
+  detail types with struct variants are now the primary recommendation
+  (they work correctly), with the flat-struct pattern shown as an
+  equivalent alternative. The old §"Detail type constraints" warning
+  section is gone.
+
 ## [0.1.1] - 2026-04-09
 
 ### Fixed

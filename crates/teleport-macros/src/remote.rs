@@ -258,6 +258,8 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
     }
 
     let (output_ty, error_ty) = parse_return_type(&sig.output)?;
+    reject_bare_bigint(&output_ty, "output")?;
+    reject_bare_bigint(&error_ty, "error detail")?;
 
     Ok(SigInfo {
         state_ty,
@@ -268,6 +270,46 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
         output_ty,
         error_ty,
     })
+}
+
+/// Reject bare 64-bit integer primitives as procedure return or error
+/// detail types. The `#[teleport_type]` macro can inject
+/// `#[serde(with = "…")]` onto struct *fields*, but the procedure return
+/// site is not a struct field — `axum::Json::<i64>(v)` would still
+/// serialise as a JSON number, producing a runtime mismatch with the
+/// TypeScript `string` type. Forcing users to wrap in a struct is
+/// consistent with the rest of the framework's struct-centric design.
+fn reject_bare_bigint(ty: &Type, position: &str) -> Result<()> {
+    let Type::Path(tp) = ty else { return Ok(()) };
+    if tp.qself.is_some() || tp.path.segments.len() != 1 {
+        return Ok(());
+    }
+    let ident = tp.path.segments[0].ident.to_string();
+    if matches!(
+        ident.as_str(),
+        "i64" | "u64" | "i128" | "u128" | "isize" | "usize"
+    ) {
+        return Err(Error::new(
+            ty.span(),
+            format!(
+                "`{ident}` is not supported as a bare {position} type\n  \
+                 JavaScript's `number` loses precision above 2^53, so teleport-rs\n  \
+                 serialises 64-bit integers as JSON strings. The `#[teleport_type]`\n  \
+                 macro handles this automatically for struct *fields*, but bare\n  \
+                 primitive returns would produce a runtime type mismatch.\n  \
+                 \n  \
+                 Wrap the value in a struct:\n  \
+                 \n  \
+                      #[teleport_type]\n  \
+                      pub struct {ident}Result {{\n  \
+                          pub value: {ident},\n  \
+                      }}\n  \
+                 \n  \
+                 Or return a plain `String` / `i32` if you don't need 64-bit precision.",
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn is_authed_user(ty: &Type) -> bool {
