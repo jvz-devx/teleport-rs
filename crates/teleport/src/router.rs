@@ -1,16 +1,29 @@
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use axum::Router;
+use axum::body::Body;
+use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::response::Json;
-use axum::routing::{get, MethodRouter};
-use axum::Router;
+use axum::routing::{MethodRouter, get};
+use http::{HeaderValue, Response, StatusCode, header};
 use serde::Serialize;
+use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 
-use crate::auth::{auth_middleware, AuthConfig, AuthMiddlewareState};
+use crate::auth::{AuthConfig, AuthMiddlewareState, auth_middleware};
 use crate::procedure::{HttpMethod, ProcedureRegistration};
+
+/// Default maximum request body size (2 MiB).
+///
+/// Applied by [`TeleportRouter::mount`] unless overridden with
+/// [`TeleportRouter::body_limit`] or removed with
+/// [`TeleportRouter::no_body_limit`].
+pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Type-erased closure that applies the auth middleware layer to a router.
 /// Captures the user type `U` at `.auth()` call time, so `TeleportRouter`
@@ -20,13 +33,17 @@ type AuthLayerFn<S> = dyn FnOnce(Router<Arc<S>>, Arc<S>) -> Router<Arc<S>> + Sen
 /// JSON payload returned by the `/__manifest` debug endpoint.
 #[derive(Debug, Clone, Serialize)]
 pub struct Manifest {
+    /// All registered procedures, keyed by fully qualified name
+    /// (for example, `"users.getUser"`).
     pub procedures: BTreeMap<String, ManifestEntry>,
 }
 
 /// A single procedure entry in the manifest.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestEntry {
+    /// HTTP method, either `"GET"` or `"POST"`.
     pub method: &'static str,
+    /// Mounted route path, for example `"/rpc/users.getUser"`.
     pub path: String,
 }
 
@@ -41,8 +58,7 @@ pub struct WithState;
 /// Receives the route path (e.g. `"/rpc/users.getUser"`) and the
 /// [`MethodRouter`] for that procedure. Return a (possibly wrapped)
 /// `MethodRouter` — this is where you add per-procedure middleware.
-type RouteHook<S> =
-    dyn Fn(&str, MethodRouter<Arc<S>>) -> MethodRouter<Arc<S>> + Send + Sync;
+type RouteHook<S> = dyn Fn(&str, MethodRouter<Arc<S>>) -> MethodRouter<Arc<S>> + Send + Sync;
 
 /// Collects all `#[remote]` procedures and builds an Axum router.
 ///
@@ -54,6 +70,8 @@ pub struct TeleportRouter<S = (), StateMarker = NoState> {
     manifest: bool,
     auth_layer: Option<Box<AuthLayerFn<S>>>,
     route_hook: Option<Arc<RouteHook<S>>>,
+    body_limit: Option<usize>,
+    catch_panic: bool,
     _marker: PhantomData<StateMarker>,
 }
 
@@ -61,6 +79,11 @@ impl<S> TeleportRouter<S, NoState>
 where
     S: Clone + Send + Sync + 'static,
 {
+    /// Create a new router builder in the [`NoState`] typestate.
+    ///
+    /// Call [`state`](Self::state) to provide shared application state and
+    /// transition into [`WithState`], where [`mount`](TeleportRouter::mount)
+    /// and [`auth`](TeleportRouter::auth) become available.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -68,6 +91,8 @@ where
             manifest: cfg!(feature = "debug-manifest"),
             auth_layer: None,
             route_hook: None,
+            body_limit: Some(DEFAULT_BODY_LIMIT),
+            catch_panic: true,
             _marker: PhantomData,
         }
     }
@@ -83,6 +108,8 @@ where
             manifest: self.manifest,
             auth_layer: self.auth_layer,
             route_hook: self.route_hook,
+            body_limit: self.body_limit,
+            catch_panic: self.catch_panic,
             _marker: PhantomData,
         }
     }
@@ -101,6 +128,9 @@ where
     /// inserted into request extensions, so procedure-level extractors
     /// can retrieve it via `FromRequestParts`. The middleware never blocks
     /// requests — extractors handle 401 responses.
+    ///
+    /// For custom rejection (e.g. returning `403 Forbidden` or an
+    /// `AppError::Detail` from the validator), see [`Self::try_auth`].
     ///
     /// # Example
     ///
@@ -126,7 +156,66 @@ where
                 auth: config,
                 app_state: state,
             });
-            router.layer(middleware::from_fn_with_state(mw_state, auth_middleware::<S, U>))
+            router.layer(middleware::from_fn_with_state(
+                mw_state,
+                auth_middleware::<S, U>,
+            ))
+        }));
+        self
+    }
+
+    /// Like [`Self::auth`], but the validator can reject the request with a
+    /// custom [`crate::AppError`]. When the validator returns `Err`, the
+    /// middleware short-circuits with that error response instead of
+    /// silently passing through and letting extractors surface a 401.
+    ///
+    /// If no token is present in the request, the middleware still passes
+    /// through without calling the validator — the "no auth attempted" case
+    /// is left to downstream extractors, matching [`Self::auth`] semantics.
+    /// The validator is only invoked when a token is actually extracted.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// TeleportRouter::new()
+    ///     .state(state)
+    ///     .try_auth("session", |token: String, state: Arc<AppState>| async move {
+    ///         match state.validate(&token).await {
+    ///             Some(user) if user.banned => Err(AppError::<()>::Forbidden),
+    ///             Some(user) => Ok(user),
+    ///             None => Err(AppError::<()>::Unauthorized),
+    ///         }
+    ///     })
+    ///     .mount()
+    /// ```
+    #[must_use]
+    pub fn try_auth<U, E, F, Fut>(mut self, cookie_name: &str, validator: F) -> Self
+    where
+        U: Clone + Send + Sync + 'static,
+        E: Serialize + Send + Sync + 'static,
+        F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<U, crate::AppError<E>>> + Send + 'static,
+    {
+        let cookie_name = cookie_name.to_owned();
+        self.auth_layer = Some(Box::new(move |router: Router<Arc<S>>, state: Arc<S>| {
+            let validator = Arc::new(validator);
+            let config = AuthConfig::new_fallible(&cookie_name, move |token, state| {
+                let validator = Arc::clone(&validator);
+                async move {
+                    use axum::response::IntoResponse;
+                    validator(token, state)
+                        .await
+                        .map_err(IntoResponse::into_response)
+                }
+            });
+            let mw_state = Arc::new(AuthMiddlewareState {
+                auth: config,
+                app_state: state,
+            });
+            router.layer(middleware::from_fn_with_state(
+                mw_state,
+                auth_middleware::<S, U>,
+            ))
         }));
         self
     }
@@ -163,6 +252,48 @@ where
         self
     }
 
+    /// Override the maximum request body size accepted by this router.
+    ///
+    /// The default is [`DEFAULT_BODY_LIMIT`] (2 MiB). Requests with bodies
+    /// larger than this are rejected with `413 Payload Too Large` before
+    /// the procedure handler runs. Use this to raise the limit for
+    /// procedures that legitimately need to accept larger payloads
+    /// (file uploads, batch operations, etc.).
+    ///
+    /// To disable the limit entirely, use [`no_body_limit`](Self::no_body_limit).
+    #[must_use]
+    pub const fn body_limit(mut self, bytes: usize) -> Self {
+        self.body_limit = Some(bytes);
+        self
+    }
+
+    /// Disable the request body size limit entirely.
+    ///
+    /// **Warning**: this removes a defense against memory-exhaustion
+    /// denial-of-service attacks. Only use this if you have an upstream proxy or other
+    /// mechanism enforcing request size limits, or if you fully trust
+    /// every client of this router.
+    ///
+    /// The method name is deliberately loud so reviewers can spot it.
+    #[must_use]
+    pub const fn no_body_limit(mut self) -> Self {
+        self.body_limit = None;
+        self
+    }
+
+    /// Disable the default panic-recovery middleware.
+    ///
+    /// By default, [`mount`](Self::mount) wraps the router with
+    /// [`tower_http::catch_panic::CatchPanicLayer`] so a panic in a single
+    /// handler returns a generic `500 Internal Server Error` instead of
+    /// crashing the process. Call this to opt out — for example, when
+    /// running under a supervisor that you want to restart on every panic.
+    #[must_use]
+    pub const fn no_catch_panic(mut self) -> Self {
+        self.catch_panic = false;
+        self
+    }
+
     /// Collect all registered procedures and build an Axum router.
     ///
     /// Uses `inventory::iter` to discover all `#[remote]` procedures registered
@@ -170,6 +301,13 @@ where
     /// called to create a `MethodRouter`, which is then (optionally) passed
     /// through the [`on_route`](Self::on_route) hook before being added to
     /// the router.
+    ///
+    /// Two safety layers are applied to the final router by default:
+    ///
+    /// 1. A 2 MiB request body size limit
+    ///    (see [`body_limit`](Self::body_limit) / [`no_body_limit`](Self::no_body_limit)).
+    /// 2. Panic recovery via [`tower_http::catch_panic::CatchPanicLayer`]
+    ///    (see [`no_catch_panic`](Self::no_catch_panic)).
     #[allow(clippy::panic)]
     pub fn mount(self) -> Router {
         // SAFETY: state is guaranteed to be `Some` by the typestate — only
@@ -193,8 +331,12 @@ where
                     )
                 });
 
-            let method_router = match self.route_hook {
-                Some(ref hook) => hook(&path, *method_router),
+            // `map_or` cannot be used here: `*method_router` is owned
+            // (unboxed) and each branch consumes it, so both branches can't
+            // share the same expression as `map_or` requires.
+            #[allow(clippy::option_if_let_else)]
+            let method_router = match self.route_hook.as_ref() {
+                Some(hook) => hook(&path, *method_router),
                 None => *method_router,
             };
 
@@ -207,12 +349,39 @@ where
             router
         };
 
+        // Apply the request body size limit, if configured. Layered before
+        // `catch_panic` so a 413 from this layer is still caught by it
+        // (though `RequestBodyLimitLayer` doesn't panic in normal use).
+        //
+        // We apply both `tower_http::limit::RequestBodyLimitLayer` (a global
+        // limit on the raw request body) and axum's `DefaultBodyLimit` (which
+        // gates `Bytes`/`Json`/`Form` extractors specifically). Without the
+        // latter, raising the limit above 2 MiB does nothing for `Json` —
+        // axum's extractor enforces its own internal default of 2 MiB.
+        let router = if let Some(bytes) = self.body_limit {
+            router
+                .layer(RequestBodyLimitLayer::new(bytes))
+                .layer(DefaultBodyLimit::max(bytes))
+        } else {
+            router.layer(DefaultBodyLimit::disable())
+        };
+
+        // Wrap the whole router in a panic-catching layer so a panicking
+        // handler returns a generic 500 instead of crashing the process.
+        let router = if self.catch_panic {
+            router.layer(CatchPanicLayer::custom(handle_panic))
+        } else {
+            router
+        };
+
         let mut final_router = router.with_state(Arc::clone(&state));
 
         if self.manifest {
             let manifest = build_manifest();
-            final_router =
-                final_router.route("/rpc/__manifest", get(move || async move { Json(manifest) }));
+            final_router = final_router.route(
+                "/rpc/__manifest",
+                get(move || async move { Json(manifest) }),
+            );
         }
 
         final_router
@@ -273,6 +442,35 @@ where
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Panic handler used by the default [`CatchPanicLayer`] applied in
+/// [`TeleportRouter::mount`].
+///
+/// Logs the panic payload (downcast to `&str` / `String` if possible) to
+/// stderr and returns a generic JSON `500` response. The panic payload is
+/// **never** included in the response body — it might contain sensitive
+/// data such as request fields, internal paths, or stack-allocated values.
+#[allow(clippy::print_stderr, clippy::needless_pass_by_value)]
+fn handle_panic(err: Box<dyn Any + Send + 'static>) -> Response<Body> {
+    let payload = err.downcast_ref::<String>().map_or_else(
+        || {
+            err.downcast_ref::<&'static str>()
+                .copied()
+                .unwrap_or("<non-string panic payload>")
+        },
+        String::as_str,
+    );
+    eprintln!("teleport-rs: handler panicked: {payload}");
+
+    let body = Body::from(r#"{"ok":false,"error":"internal server error"}"#);
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    response
 }
 
 /// Build a [`Manifest`] from all inventory-registered procedures.

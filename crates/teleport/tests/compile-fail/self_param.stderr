@@ -1,4 +1,5 @@
-error: #[remote] functions cannot have `self`
+error: #[remote] functions are free functions and cannot take `self`
+         remove the `self` parameter and take state by reference instead
  --> tests/compile-fail/self_param.rs:7:24
   |
 7 |     async fn with_self(&self) -> Result<String, AppError> {

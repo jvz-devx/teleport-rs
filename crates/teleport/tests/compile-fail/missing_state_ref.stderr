@@ -1,4 +1,6 @@
-error: first parameter must be a reference to the state type (e.g. `ctx: &AppState`)
+error: first parameter must be a shared reference to the state type
+         e.g. `async fn my_proc(ctx: &AppState, ...)`
+         The state parameter is always required and must be the first argument.
  --> tests/compile-fail/missing_state_ref.rs:7:22
   |
 7 | async fn no_ref(ctx: AppState) -> Result<String, AppError> {

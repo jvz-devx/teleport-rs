@@ -121,14 +121,29 @@ impl AppState {
         let posts = self.posts.lock().unwrap_or_else(PoisonError::into_inner);
         author_id.map_or_else(
             || posts.clone(),
-            |id| posts.iter().filter(|p| p.author_id == id).cloned().collect(),
+            |id| {
+                posts
+                    .iter()
+                    .filter(|p| p.author_id == id)
+                    .cloned()
+                    .collect()
+            },
         )
     }
 
     /// Create a new post and return it.
-    pub fn create_post(&self, author_id: &str, title: String, content: String, tags: Vec<String>) -> Post {
+    pub fn create_post(
+        &self,
+        author_id: &str,
+        title: String,
+        content: String,
+        tags: Vec<String>,
+    ) -> Post {
         let id = {
-            let mut next_id = self.next_post_id.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut next_id = self
+                .next_post_id
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             let id = next_id.to_string();
             *next_id += 1;
             id

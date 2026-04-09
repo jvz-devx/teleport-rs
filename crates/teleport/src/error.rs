@@ -9,13 +9,29 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type")]
 pub enum AppError<T = ()> {
+    /// No valid session was provided. Maps to `401 Unauthorized`.
     Unauthorized,
+    /// Authenticated but not permitted. Maps to `403 Forbidden`.
     Forbidden,
+    /// The requested resource does not exist. Maps to `404 Not Found`.
     NotFound,
-    BadRequest { message: String },
-    Internal { message: String },
+    /// Input validation failed. Maps to `400 Bad Request`.
+    BadRequest {
+        /// Human-readable reason the request was rejected.
+        message: String,
+    },
+    /// Unexpected server error. Maps to `500 Internal Server Error`.
+    Internal {
+        /// Internal message for logs; also returned in the JSON body.
+        message: String,
+    },
+    /// Too many requests; the client should back off. Maps to `429 Too Many Requests`.
     RateLimited,
-    Detail { detail: T },
+    /// Procedure-specific error typed by `T`. Maps to `422 Unprocessable Entity`.
+    Detail {
+        /// Procedure-specific error payload.
+        detail: T,
+    },
 }
 
 impl<T> From<T> for AppError<T> {

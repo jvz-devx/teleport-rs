@@ -1,4 +1,5 @@
 error: #[remote] functions must be async
+         add `async` before `fn` — e.g. `async fn my_proc(...)`
  --> tests/compile-fail/missing_async.rs:7:1
   |
 7 | fn not_async(_ctx: &AppState) -> Result<String, AppError> {

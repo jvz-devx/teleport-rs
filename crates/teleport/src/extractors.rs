@@ -13,7 +13,9 @@ use crate::error::AppError;
 /// authentication. Use `Option<AuthedUser>` for optional auth.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthedUser {
+    /// Stable user identifier, usually a primary key or UUID.
     pub id: String,
+    /// Primary email address for the user.
     pub email: String,
 }
 
@@ -88,18 +90,20 @@ where
             .is_some_and(|ct| ct.starts_with("application/x-www-form-urlencoded"));
 
         if is_form {
-            let Form(data) = Form::<T>::from_request(req, state)
-                .await
-                .map_err(|e| AppError::BadRequest {
-                    message: e.to_string(),
-                })?;
+            let Form(data) =
+                Form::<T>::from_request(req, state)
+                    .await
+                    .map_err(|e| AppError::BadRequest {
+                        message: e.to_string(),
+                    })?;
             Ok(Self(data))
         } else {
-            let Json(data) = Json::<T>::from_request(req, state)
-                .await
-                .map_err(|e| AppError::BadRequest {
-                    message: e.to_string(),
-                })?;
+            let Json(data) =
+                Json::<T>::from_request(req, state)
+                    .await
+                    .map_err(|e| AppError::BadRequest {
+                        message: e.to_string(),
+                    })?;
             Ok(Self(data))
         }
     }

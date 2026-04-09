@@ -6,18 +6,43 @@ use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 
-type ValidatorFn<S, U> =
+type InfallibleValidatorFn<S, U> =
     dyn Fn(String, Arc<S>) -> Pin<Box<dyn Future<Output = Option<U>> + Send>> + Send + Sync;
+
+type FallibleValidatorFn<S, U> = dyn Fn(String, Arc<S>) -> Pin<Box<dyn Future<Output = Result<U, Response>> + Send>>
+    + Send
+    + Sync;
+
+/// Internal shape of the validator configured on [`AuthConfig`].
+///
+/// Two variants are supported so callers can either silently pass through on
+/// invalid tokens (letting extractors surface 401s) or short-circuit the
+/// request with a custom rejection response.
+pub(crate) enum ValidatorKind<S, U> {
+    /// Returns `Option<U>`: on `None`, the middleware passes through and
+    /// downstream extractors handle the missing user.
+    Infallible(Arc<InfallibleValidatorFn<S, U>>),
+    /// Returns `Result<U, Response>`: on `Err`, the middleware short-circuits
+    /// with the provided response instead of running the remainder of the
+    /// tower stack.
+    Fallible(Arc<FallibleValidatorFn<S, U>>),
+}
 
 /// Configuration for the auth middleware.
 ///
 /// Extracts a session token from cookies or the `Authorization: Bearer` header,
 /// then calls a user-provided validator to resolve it into a user value of type `U`.
 /// If validation succeeds, the user is inserted into request extensions.
-/// The request always proceeds — procedure-level extractors handle 401 responses.
+///
+/// Two validator shapes are supported:
+///
+/// - [`AuthConfig::new`] — infallible: returns `Option<U>`. Missing/invalid
+///   tokens always pass through; procedure-level extractors surface 401s.
+/// - [`AuthConfig::new_fallible`] — fallible: returns `Result<U, Response>`.
+///   An `Err` short-circuits the request with the supplied response.
 pub struct AuthConfig<S, U> {
     pub(crate) cookie_name: String,
-    pub(crate) validator: Arc<ValidatorFn<S, U>>,
+    pub(crate) validator: ValidatorKind<S, U>,
 }
 
 impl<S, U> AuthConfig<S, U>
@@ -25,11 +50,15 @@ where
     S: Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
-    /// Create a new auth configuration.
+    /// Create a new auth configuration with an infallible validator.
     ///
     /// - `cookie_name`: the name of the session cookie to check first.
     /// - `validator`: an async function that receives a token string and shared
     ///   state, returning `Some(U)` if the token is valid.
+    ///
+    /// Missing or invalid tokens never block the request — downstream
+    /// extractors (e.g. [`crate::AuthedUser`]) are responsible for returning
+    /// `401 Unauthorized` when a procedure requires auth.
     pub fn new<F, Fut>(cookie_name: &str, validator: F) -> Self
     where
         F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
@@ -37,12 +66,47 @@ where
     {
         Self {
             cookie_name: cookie_name.to_owned(),
-            validator: Arc::new(move |token, state| Box::pin(validator(token, state))),
+            validator: ValidatorKind::Infallible(Arc::new(move |token, state| {
+                Box::pin(validator(token, state))
+            })),
+        }
+    }
+
+    /// Create a new auth configuration with a fallible validator.
+    ///
+    /// Unlike [`Self::new`], the validator returns `Result<U, Response>`. When
+    /// it returns `Err(response)`, the middleware short-circuits the request
+    /// with that response instead of letting it reach the procedure handler.
+    ///
+    /// This is the building block behind [`crate::TeleportRouter::try_auth`],
+    /// which wraps an `AppError<E>`-returning validator so user code doesn't
+    /// have to construct `Response` values directly.
+    pub fn new_fallible<F, Fut>(cookie_name: &str, validator: F) -> Self
+    where
+        F: Fn(String, Arc<S>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<U, Response>> + Send + 'static,
+    {
+        Self {
+            cookie_name: cookie_name.to_owned(),
+            validator: ValidatorKind::Fallible(Arc::new(move |token, state| {
+                Box::pin(validator(token, state))
+            })),
         }
     }
 }
 
 /// Axum middleware that extracts a token and validates it into a user of type `U`.
+///
+/// Behaviour depends on which [`ValidatorKind`] was configured:
+///
+/// - **Infallible**: if a token is present and validates to `Some(user)`, the
+///   user is inserted into request extensions; otherwise the request passes
+///   through unchanged.
+/// - **Fallible**: if a token is present and validates to `Ok(user)`, the user
+///   is inserted into request extensions; if the validator returns
+///   `Err(response)`, the request is short-circuited with that response. If
+///   no token is present, the request still passes through — letting
+///   extractors (or absence of an auth extractor) decide what happens.
 pub(crate) async fn auth_middleware<S, U>(
     State(config): State<Arc<AuthMiddlewareState<S, U>>>,
     mut request: Request,
@@ -52,10 +116,22 @@ where
     S: Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
-    if let Some(token) = extract_token(&request, &config.auth.cookie_name)
-        && let Some(user) = (config.auth.validator)(token, Arc::clone(&config.app_state)).await
-    {
-        request.extensions_mut().insert(user);
+    if let Some(token) = extract_token(&request, &config.auth.cookie_name) {
+        match &config.auth.validator {
+            ValidatorKind::Infallible(validate) => {
+                if let Some(user) = validate(token, Arc::clone(&config.app_state)).await {
+                    request.extensions_mut().insert(user);
+                }
+            }
+            ValidatorKind::Fallible(validate) => {
+                match validate(token, Arc::clone(&config.app_state)).await {
+                    Ok(user) => {
+                        request.extensions_mut().insert(user);
+                    }
+                    Err(response) => return response,
+                }
+            }
+        }
     }
     next.run(request).await
 }
@@ -110,6 +186,9 @@ fn extract_from_bearer(request: &Request) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    // Test-only: `.expect()` in helpers is informative; panics are caught by the test runner.
+    #![allow(clippy::expect_used)]
+
     use super::*;
     use axum::body::Body;
 
@@ -178,9 +257,6 @@ mod tests {
     #[test]
     fn custom_cookie_name() {
         let req = make_request(&[("cookie", "my_token=secret")]);
-        assert_eq!(
-            extract_token(&req, "my_token"),
-            Some("secret".to_owned())
-        );
+        assert_eq!(extract_token(&req, "my_token"), Some("secret".to_owned()));
     }
 }

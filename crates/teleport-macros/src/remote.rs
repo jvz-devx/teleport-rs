@@ -1,9 +1,11 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
+    Error, FnArg, ItemFn, Lit, Meta, PatType, Result, ReturnType, Token, Type,
     parse::{Parse, ParseStream},
-    parse2, punctuated::Punctuated, spanned::Spanned, Error, FnArg, ItemFn, Lit, Meta, PatType,
-    Result, ReturnType, Token, Type,
+    parse2,
+    punctuated::Punctuated,
+    spanned::Spanned,
 };
 
 // ---------------------------------------------------------------------------
@@ -57,44 +59,74 @@ fn parse_attr(attr: TokenStream) -> Result<RemoteAttr> {
         match meta {
             Meta::Path(path) => {
                 if proc_type.is_some() {
-                    return Err(Error::new(path.span(), "duplicate procedure type"));
+                    return Err(Error::new(
+                        path.span(),
+                        "procedure type already specified (use only one of `query`, `command`, or `form`)",
+                    ));
                 }
-                let ident = path
-                    .get_ident()
-                    .ok_or_else(|| Error::new(path.span(), "expected `query`, `command`, or `form`"))?;
+                let ident = path.get_ident().ok_or_else(|| {
+                    Error::new(
+                        path.span(),
+                        "unknown procedure type: expected `query`, `command`, or `form`",
+                    )
+                })?;
                 proc_type = Some(match ident.to_string().as_str() {
                     "query" => ProcType::Query,
                     "command" => ProcType::Command,
                     "form" => ProcType::Form,
-                    _ => {
+                    other => {
                         return Err(Error::new(
                             ident.span(),
-                            "expected `query`, `command`, or `form`",
+                            format!(
+                                "unknown procedure type `{other}`: expected `query`, `command`, or `form`"
+                            ),
                         ));
                     }
                 });
             }
             Meta::NameValue(nv) => {
-                let key = nv
-                    .path
-                    .get_ident()
-                    .ok_or_else(|| Error::new(nv.path.span(), "expected `name` or `prefix`"))?
-                    .to_string();
+                let key_ident = nv.path.get_ident().ok_or_else(|| {
+                    Error::new(
+                        nv.path.span(),
+                        "unknown attribute key: expected `name` or `prefix` (e.g. `#[remote(query, name = \"foo\")]`)",
+                    )
+                })?;
+                let key = key_ident.to_string();
                 let value = match &nv.value {
                     syn::Expr::Lit(lit) => match &lit.lit {
                         Lit::Str(s) => s.value(),
-                        _ => return Err(Error::new(lit.span(), "expected a string literal")),
+                        _ => {
+                            return Err(Error::new(
+                                lit.span(),
+                                "expected a string literal (e.g. `name = \"foo\"`)",
+                            ));
+                        }
                     },
-                    other => return Err(Error::new(other.span(), "expected a string literal")),
+                    other => {
+                        return Err(Error::new(
+                            other.span(),
+                            "expected a string literal (e.g. `name = \"foo\"`)",
+                        ));
+                    }
                 };
                 match key.as_str() {
                     "name" => name_override = Some(value),
                     "prefix" => prefix_override = Some(value),
-                    _ => return Err(Error::new(nv.path.span(), "expected `name` or `prefix`")),
+                    other => {
+                        return Err(Error::new(
+                            nv.path.span(),
+                            format!(
+                                "unknown attribute key `{other}`: expected `name` or `prefix` (e.g. `#[remote(query, name = \"foo\")]`)"
+                            ),
+                        ));
+                    }
                 }
             }
             other @ Meta::List(_) => {
-                return Err(Error::new(other.span(), "unexpected attribute argument"));
+                return Err(Error::new(
+                    other.span(),
+                    "unexpected attribute argument: expected `query`, `command`, `form`, `name = \"...\"`, or `prefix = \"...\"`",
+                ));
             }
         }
     }
@@ -102,7 +134,10 @@ fn parse_attr(attr: TokenStream) -> Result<RemoteAttr> {
     let proc_type = proc_type.ok_or_else(|| {
         Error::new(
             Span::call_site(),
-            "missing procedure type: expected `query`, `command`, or `form`",
+            "#[remote] requires a procedure type. Use one of:\n  \
+             \u{2022} #[remote(query)]   \u{2014} GET endpoint, input from query string\n  \
+             \u{2022} #[remote(command)] \u{2014} POST endpoint, JSON body\n  \
+             \u{2022} #[remote(form)]    \u{2014} POST endpoint, form-urlencoded or JSON body",
         )
     })?;
 
@@ -140,7 +175,11 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
     let sig = &func.sig;
 
     if sig.asyncness.is_none() {
-        return Err(Error::new(sig.fn_token.span, "#[remote] functions must be async"));
+        return Err(Error::new(
+            sig.fn_token.span,
+            "#[remote] functions must be async\n  \
+             add `async` before `fn` \u{2014} e.g. `async fn my_proc(...)`",
+        ));
     }
 
     let params: Vec<&PatType> = sig
@@ -148,14 +187,19 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
         .iter()
         .map(|arg| match arg {
             FnArg::Typed(pt) => Ok(pt),
-            FnArg::Receiver(r) => Err(Error::new(r.span(), "#[remote] functions cannot have `self`")),
+            FnArg::Receiver(r) => Err(Error::new(
+                r.span(),
+                "#[remote] functions are free functions and cannot take `self`\n  \
+                 remove the `self` parameter and take state by reference instead",
+            )),
         })
         .collect::<Result<_>>()?;
 
     if params.is_empty() {
         return Err(Error::new(
             sig.paren_token.span.join(),
-            "#[remote] functions must have at least one parameter (the state reference)",
+            "#[remote] functions must have at least one parameter \u{2014} the state reference\n  \
+             e.g. `async fn my_proc(ctx: &AppState, ...)`",
         ));
     }
 
@@ -165,7 +209,9 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
         other => {
             return Err(Error::new(
                 other.span(),
-                "first parameter must be a reference to the state type (e.g. `ctx: &AppState`)",
+                "first parameter must be a shared reference to the state type\n  \
+                 e.g. `async fn my_proc(ctx: &AppState, ...)`\n  \
+                 The state parameter is always required and must be the first argument.",
             ));
         }
     };
@@ -183,7 +229,12 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
 
         if is_auth_by_attr || is_auth_by_name || is_opt_auth_by_name {
             if has_auth || has_optional_auth {
-                return Err(Error::new(ty.span(), "duplicate auth parameter"));
+                return Err(Error::new(
+                    ty.span(),
+                    "duplicate auth parameter\n  \
+                     a #[remote] function may have at most one auth parameter (marked with `#[auth]` \
+                     or typed as `AuthedUser`/`Option<AuthedUser>`)",
+                ));
             }
             if is_auth_by_attr && has_optional_auth_attr(param) || is_opt_auth_by_name {
                 has_optional_auth = true;
@@ -198,7 +249,8 @@ fn parse_sig(func: &ItemFn) -> Result<SigInfo> {
             if input_ty.is_some() {
                 return Err(Error::new(
                     ty.span(),
-                    "only one input parameter is allowed (besides state and auth)",
+                    "only one input parameter is allowed besides state and auth\n  \
+                     combine multiple fields into a single `#[teleport_type]` struct and pass it as one argument",
                 ));
             }
             input_ty = Some(ty.clone());
@@ -234,62 +286,69 @@ fn is_option_authed_user(ty: &Type) -> bool {
         return false;
     };
     args.args.len() == 1
-        && args.args.first().is_some_and(|a| {
-            matches!(a, syn::GenericArgument::Type(inner) if is_authed_user(inner))
-        })
+        && args.args.first().is_some_and(
+            |a| matches!(a, syn::GenericArgument::Type(inner) if is_authed_user(inner)),
+        )
 }
 
 fn last_segment_is(ty: &Type, name: &str) -> bool {
     let Type::Path(tp) = ty else { return false };
-    tp.path
-        .segments
-        .last()
-        .is_some_and(|seg| seg.ident == name)
+    tp.path.segments.last().is_some_and(|seg| seg.ident == name)
 }
 
 /// Parse `-> Result<T, AppError<E>>` and extract `(T, E)`.
 fn parse_return_type(ret: &ReturnType) -> Result<(Type, Type)> {
+    const RETURN_TYPE_HELP: &str = "return type must be `Result<T, AppError<E>>`\n  \
+        where T is the success value and E is the typed error detail.\n  \
+        Both T and E should implement `#[teleport_type]`.";
+
     let ReturnType::Type(_, ty) = ret else {
         return Err(Error::new(
             ret.span(),
-            "#[remote] functions must return `Result<T, AppError<E>>`",
+            "#[remote] functions must return a value\n  \
+             return type must be `Result<T, AppError<E>>`\n  \
+             where T is the success value and E is the typed error detail.\n  \
+             Both T and E should implement `#[teleport_type]`.",
         ));
     };
 
     let Type::Path(tp) = ty.as_ref() else {
-        return Err(Error::new(ty.span(), "expected `Result<T, AppError<E>>`"));
+        return Err(Error::new(ty.span(), RETURN_TYPE_HELP));
     };
 
     let seg = tp
         .path
         .segments
         .last()
-        .ok_or_else(|| Error::new(tp.span(), "expected `Result<T, AppError<E>>`"))?;
+        .ok_or_else(|| Error::new(tp.span(), RETURN_TYPE_HELP))?;
 
     if seg.ident != "Result" {
-        return Err(Error::new(
-            seg.ident.span(),
-            "return type must be `Result<T, AppError<E>>`",
-        ));
+        return Err(Error::new(seg.ident.span(), RETURN_TYPE_HELP));
     }
 
     let syn::PathArguments::AngleBracketed(args) = &seg.arguments else {
-        return Err(Error::new(seg.span(), "expected `Result<T, AppError<E>>`"));
+        return Err(Error::new(seg.span(), RETURN_TYPE_HELP));
     };
 
     let mut iter = args.args.iter();
     let output_arg = iter
         .next()
-        .ok_or_else(|| Error::new(args.span(), "expected `Result<T, AppError<E>>`"))?;
+        .ok_or_else(|| Error::new(args.span(), RETURN_TYPE_HELP))?;
     let error_arg = iter
         .next()
-        .ok_or_else(|| Error::new(args.span(), "expected `Result<T, AppError<E>>`"))?;
+        .ok_or_else(|| Error::new(args.span(), RETURN_TYPE_HELP))?;
 
     let syn::GenericArgument::Type(output_ty) = output_arg else {
-        return Err(Error::new(output_arg.span(), "expected a type"));
+        return Err(Error::new(
+            output_arg.span(),
+            "expected a type as the success value of `Result<T, AppError<E>>`",
+        ));
     };
     let syn::GenericArgument::Type(error_wrapper) = error_arg else {
-        return Err(Error::new(error_arg.span(), "expected `AppError<E>`"));
+        return Err(Error::new(
+            error_arg.span(),
+            "expected `AppError<E>` as the error type of `Result<T, AppError<E>>`",
+        ));
     };
 
     let error_ty = extract_app_error_inner(error_wrapper)?;
@@ -298,38 +357,45 @@ fn parse_return_type(ret: &ReturnType) -> Result<(Type, Type)> {
 
 /// Given `AppError<E>`, return `E`. If just `AppError`, return `()`.
 fn extract_app_error_inner(ty: &Type) -> Result<Type> {
+    const APP_ERROR_HELP: &str = "error type must be `AppError` or `AppError<E>`\n  \
+        use `AppError<E>` to return a typed error payload where E implements `#[teleport_type]`,\n  \
+        or `AppError` for an untyped error.";
+
     let Type::Path(tp) = ty else {
-        return Err(Error::new(ty.span(), "expected `AppError<E>`"));
+        return Err(Error::new(ty.span(), APP_ERROR_HELP));
     };
 
     let seg = tp
         .path
         .segments
         .last()
-        .ok_or_else(|| Error::new(tp.span(), "expected `AppError<E>`"))?;
+        .ok_or_else(|| Error::new(tp.span(), APP_ERROR_HELP))?;
 
     if seg.ident != "AppError" {
-        return Err(Error::new(
-            seg.ident.span(),
-            "error type must be `AppError` or `AppError<E>`",
-        ));
+        return Err(Error::new(seg.ident.span(), APP_ERROR_HELP));
     }
 
     match &seg.arguments {
         syn::PathArguments::None => Ok(syn::parse_quote!(())),
         syn::PathArguments::AngleBracketed(args) => {
-            let arg = args
-                .args
-                .first()
-                .ok_or_else(|| Error::new(args.span(), "expected a type inside `AppError<...>`"))?;
+            let arg = args.args.first().ok_or_else(|| {
+                Error::new(
+                    args.span(),
+                    "expected a type inside `AppError<...>` (e.g. `AppError<MyError>`)",
+                )
+            })?;
             let syn::GenericArgument::Type(inner) = arg else {
-                return Err(Error::new(arg.span(), "expected a type"));
+                return Err(Error::new(
+                    arg.span(),
+                    "expected a type inside `AppError<...>` (e.g. `AppError<MyError>`)",
+                ));
             };
             Ok(inner.clone())
         }
-        syn::PathArguments::Parenthesized(_) => {
-            Err(Error::new(seg.arguments.span(), "unexpected parenthesized arguments"))
-        }
+        syn::PathArguments::Parenthesized(_) => Err(Error::new(
+            seg.arguments.span(),
+            "unexpected parenthesized arguments on `AppError` \u{2014} use `AppError<E>` with angle brackets",
+        )),
     }
 }
 
@@ -450,17 +516,20 @@ fn gen_handler(
         None
     };
 
-    let input_extract = sig.input_ty.as_ref().map(|input| match remote_attr.proc_type {
-        ProcType::Query => quote! {
-            teleport::QsQuery(input): teleport::QsQuery<#input>
-        },
-        ProcType::Command => quote! {
-            axum::Json(input): axum::Json<#input>
-        },
-        ProcType::Form => quote! {
-            teleport::FormOrJson(input): teleport::FormOrJson<#input>
-        },
-    });
+    let input_extract = sig
+        .input_ty
+        .as_ref()
+        .map(|input| match remote_attr.proc_type {
+            ProcType::Query => quote! {
+                teleport::QsQuery(input): teleport::QsQuery<#input>
+            },
+            ProcType::Command => quote! {
+                axum::Json(input): axum::Json<#input>
+            },
+            ProcType::Form => quote! {
+                teleport::FormOrJson(input): teleport::FormOrJson<#input>
+            },
+        });
 
     let mut handler_params = vec![state_extract];
     if let Some(ref auth) = auth_extract {

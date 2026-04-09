@@ -1,3 +1,1 @@
-pub use teleport_core::{
-    ErasedMountFn, HttpMethod, ProcedureRegistration, ProcedureType,
-};
+pub use teleport_core::{ErasedMountFn, HttpMethod, ProcedureRegistration, ProcedureType};

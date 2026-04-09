@@ -1,6 +1,6 @@
 #![allow(clippy::unused_async)]
 
-use teleport::{remote, AppError, AuthedUser};
+use teleport::{AppError, AuthedUser, remote};
 
 use crate::state::AppState;
 use crate::types::{LoginErrorDetail, LoginRequest, LoginResponse, User};
@@ -11,11 +11,11 @@ async fn login(
     ctx: &AppState,
     input: LoginRequest,
 ) -> Result<LoginResponse, AppError<LoginErrorDetail>> {
-    let (token, user) = ctx.login(&input.email, &input.password).ok_or(AppError::detail(
-        LoginErrorDetail {
+    let (token, user) = ctx
+        .login(&input.email, &input.password)
+        .ok_or(AppError::detail(LoginErrorDetail {
             invalid_credentials: true,
-        },
-    ))?;
+        }))?;
 
     Ok(LoginResponse {
         token: token.to_owned(),
@@ -38,7 +38,5 @@ async fn logout(_ctx: &AppState, _auth: AuthedUser) -> Result<(), AppError> {
 /// Get the currently authenticated user's profile.
 #[remote(query)]
 async fn get_profile(ctx: &AppState, auth: AuthedUser) -> Result<User, AppError> {
-    ctx.get_user(&auth.id)
-        .cloned()
-        .ok_or(AppError::NotFound)
+    ctx.get_user(&auth.id).cloned().ok_or(AppError::NotFound)
 }

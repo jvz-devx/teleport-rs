@@ -1,9 +1,17 @@
+// `#[remote]` requires procedures to be `async`, but the test fixtures don't
+// actually await anything — so silence `unused_async` at the file level.
+// `expect_used` / `panic` are fine in tests — a panic is an assertion failure.
+#![allow(clippy::unused_async, clippy::expect_used, clippy::panic)]
+
 use std::sync::Arc;
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
-use teleport::{remote, AppError, AuthedUser, ProcedureRegistration, ProcedureType, TeleportRouter, TeleportUser};
+use teleport::{
+    AppError, AuthedUser, ProcedureRegistration, ProcedureType, TeleportRouter, TeleportUser,
+    remote,
+};
 
 // A minimal state type for testing.
 #[derive(Clone)]
@@ -85,10 +93,7 @@ async fn get_public_profile(
 }
 
 #[remote(query, name = "fetchUser")]
-async fn get_user_renamed(
-    _ctx: &AppState,
-    _input: UserId,
-) -> Result<User, AppError<GetUserError>> {
+async fn get_user_renamed(_ctx: &AppState, _input: UserId) -> Result<User, AppError<GetUserError>> {
     Ok(User {
         id: "1".into(),
         name: "Alice".into(),
@@ -141,8 +146,9 @@ async fn get_custom_profile(
 
 #[test]
 fn inventory_collects_procedures() {
-    let procedures: Vec<&ProcedureRegistration> =
-        inventory::iter::<ProcedureRegistration>.into_iter().collect();
+    let procedures: Vec<&ProcedureRegistration> = inventory::iter::<ProcedureRegistration>
+        .into_iter()
+        .collect();
 
     // We defined 8 procedures above.
     assert_eq!(procedures.len(), 8, "expected 8 registered procedures");
@@ -191,9 +197,7 @@ fn no_input_procedure() {
 
 #[test]
 fn router_builds_without_panic() {
-    let _router = TeleportRouter::new()
-        .state(Arc::new(AppState))
-        .mount();
+    let _router = TeleportRouter::new().state(Arc::new(AppState)).mount();
 }
 
 // ---------------------------------------------------------------------------

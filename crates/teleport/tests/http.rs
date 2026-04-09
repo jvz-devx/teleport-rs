@@ -1,4 +1,9 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::unused_async, clippy::panic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unused_async,
+    clippy::panic
+)]
 
 use std::sync::Arc;
 
@@ -8,7 +13,7 @@ use http::{Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
 
-use teleport::{remote, AppError, AuthedUser, TeleportRouter, TeleportUser};
+use teleport::{AppError, AuthedUser, TeleportRouter, TeleportUser, remote};
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -76,10 +81,7 @@ async fn get_user(_ctx: &AppState, input: UserId) -> Result<User, AppError<UserE
 }
 
 #[remote(command)]
-async fn create_user(
-    _ctx: &AppState,
-    input: CreateUserInput,
-) -> Result<User, AppError<UserError>> {
+async fn create_user(_ctx: &AppState, input: CreateUserInput) -> Result<User, AppError<UserError>> {
     Ok(User {
         id: "new-1".to_owned(),
         name: input.name,
@@ -111,9 +113,7 @@ async fn not_found_route(_ctx: &AppState) -> Result<(), AppError> {
 }
 
 #[remote(query)]
-async fn validation_error_route(
-    _ctx: &AppState,
-) -> Result<(), AppError<ValidationError>> {
+async fn validation_error_route(_ctx: &AppState) -> Result<(), AppError<ValidationError>> {
     Err(AppError::Detail {
         detail: ValidationError {
             field: "email".to_owned(),
@@ -134,18 +134,12 @@ async fn submit_feedback(
 }
 
 #[remote(query)]
-async fn search_with_filter(
-    _ctx: &AppState,
-    input: FilterInput,
-) -> Result<Filter, AppError> {
+async fn search_with_filter(_ctx: &AppState, input: FilterInput) -> Result<Filter, AppError> {
     Ok(input.filter)
 }
 
 #[remote(query)]
-async fn search_with_tags(
-    _ctx: &AppState,
-    input: TagsInput,
-) -> Result<Vec<String>, AppError> {
+async fn search_with_tags(_ctx: &AppState, input: TagsInput) -> Result<Vec<String>, AppError> {
     Ok(input.tags)
 }
 
@@ -158,10 +152,7 @@ async fn search_optional(
 }
 
 #[remote(query)]
-async fn get_my_profile(
-    _ctx: &AppState,
-    auth: AuthedUser,
-) -> Result<User, AppError<UserError>> {
+async fn get_my_profile(_ctx: &AppState, auth: AuthedUser) -> Result<User, AppError<UserError>> {
     Ok(User {
         id: auth.id,
         name: "Authenticated User".to_owned(),
@@ -229,16 +220,19 @@ fn app() -> axum::Router {
 fn app_with_auth() -> axum::Router {
     TeleportRouter::new()
         .state(Arc::new(AppState))
-        .auth("session", |token: String, _state: Arc<AppState>| async move {
-            // Simple token → user mapping for tests.
-            match token.as_str() {
-                "valid-token" => Some(AuthedUser {
-                    id: "user-42".to_owned(),
-                    email: "test@example.com".to_owned(),
-                }),
-                _ => None,
-            }
-        })
+        .auth(
+            "session",
+            |token: String, _state: Arc<AppState>| async move {
+                // Simple token → user mapping for tests.
+                match token.as_str() {
+                    "valid-token" => Some(AuthedUser {
+                        id: "user-42".to_owned(),
+                        email: "test@example.com".to_owned(),
+                    }),
+                    _ => None,
+                }
+            },
+        )
         .mount()
 }
 
@@ -246,15 +240,18 @@ fn app_with_auth() -> axum::Router {
 fn app_with_custom_auth() -> axum::Router {
     TeleportRouter::new()
         .state(Arc::new(AppState))
-        .auth("session", |token: String, _state: Arc<AppState>| async move {
-            match token.as_str() {
-                "admin-token" => Some(CustomUser {
-                    user_id: 99,
-                    role: "admin".to_owned(),
-                }),
-                _ => None,
-            }
-        })
+        .auth(
+            "session",
+            |token: String, _state: Arc<AppState>| async move {
+                match token.as_str() {
+                    "admin-token" => Some(CustomUser {
+                        user_id: 99,
+                        role: "admin".to_owned(),
+                    }),
+                    _ => None,
+                }
+            },
+        )
         .mount()
 }
 
@@ -283,7 +280,15 @@ async fn get_query_with_input() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let user: User = response_json(response).await;
-    assert_eq!(user.id, "123");
+    // Verifies the query-string `id` param round-trips into the handler's
+    // `UserId` input and back through the `User` response — the handler
+    // returns `user.id = input.id`, so this really is exercising deserialization.
+    assert_eq!(
+        user.id, "123",
+        "query-string id should round-trip into the response"
+    );
+    // The name is a hardcoded handler constant; this assert only verifies
+    // that the JSON body shape deserializes cleanly (smoke test).
     assert_eq!(user.name, "Test User");
 }
 
@@ -343,6 +348,21 @@ async fn app_error_unauthorized() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // Verify the body is a well-formed AppError::Unauthorized, not just any
+    // 401 — the content-type must be JSON and the tagged union discriminant
+    // must match. This catches regressions in the IntoResponse impl.
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/json"),
+    );
+    let error: AppError = response_json(response).await;
+    assert!(
+        matches!(error, AppError::Unauthorized),
+        "expected Unauthorized variant, got {error:?}",
+    );
 }
 
 #[tokio::test]
@@ -358,6 +378,19 @@ async fn app_error_not_found() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // Verify the body is a well-formed AppError::NotFound, not just any 404.
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/json"),
+    );
+    let error: AppError = response_json(response).await;
+    assert!(
+        matches!(error, AppError::NotFound),
+        "expected NotFound variant, got {error:?}",
+    );
 }
 
 #[tokio::test]
@@ -496,7 +529,12 @@ async fn qs_nested_object() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let filter: Filter = response_json(response).await;
-    assert_eq!(filter, Filter { status: "active".to_owned() });
+    assert_eq!(
+        filter,
+        Filter {
+            status: "active".to_owned()
+        }
+    );
 }
 
 #[tokio::test]
@@ -719,7 +757,10 @@ async fn on_route_applies_middleware_to_matching_routes() {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
-        response.headers().get("x-custom").map(|v| v.to_str().unwrap()),
+        response
+            .headers()
+            .get("x-custom")
+            .map(|v| v.to_str().unwrap()),
         Some("applied"),
     );
 
@@ -808,4 +849,256 @@ async fn custom_auth_bearer_token() {
     assert_eq!(response.status(), StatusCode::OK);
     let user: User = response_json(response).await;
     assert_eq!(user.id, "99");
+}
+
+// ---------------------------------------------------------------------------
+// Safety layers: body limit + panic recovery (Unit 1)
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::panic)]
+mod safety_layers {
+    use std::sync::Arc;
+
+    use axum::body::Body;
+    use http::{Request, StatusCode};
+    use serde::{Deserialize, Serialize};
+    use tower::ServiceExt;
+
+    use teleport::{AppError, TeleportRouter, remote};
+
+    use super::AppState;
+
+    #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+    struct LargePayload {
+        blob: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+    struct PayloadError;
+
+    #[remote(command, prefix = "safety")]
+    async fn echo_blob(
+        _ctx: &AppState,
+        input: LargePayload,
+    ) -> Result<LargePayload, AppError<PayloadError>> {
+        Ok(input)
+    }
+
+    #[remote(command, prefix = "safety")]
+    async fn boom(
+        _ctx: &AppState,
+        _input: LargePayload,
+    ) -> Result<LargePayload, AppError<PayloadError>> {
+        panic!("boom");
+    }
+
+    /// Build a JSON body roughly `bytes` long. The exact byte count is
+    /// `bytes + a few` because of the `{"blob":"..."}` framing — for body
+    /// limit testing we just need it to be larger than the limit.
+    fn payload_of(bytes: usize) -> Vec<u8> {
+        let blob = "x".repeat(bytes);
+        serde_json::to_vec(&LargePayload { blob }).unwrap()
+    }
+
+    fn default_app() -> axum::Router {
+        TeleportRouter::new().state(Arc::new(AppState)).mount()
+    }
+
+    #[tokio::test]
+    async fn test_default_body_limit_rejects_large_payload() {
+        // 3 MiB > 2 MiB default limit.
+        let body = payload_of(3 * 1024 * 1024);
+        let response = default_app()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc/safety.echoBlob")
+                    .header("content-type", "application/json")
+                    .header("content-length", body.len().to_string())
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn test_body_limit_override_accepts_larger_payload() {
+        let app = TeleportRouter::new()
+            .state(Arc::new(AppState))
+            .body_limit(10 * 1024 * 1024)
+            .mount();
+
+        let body = payload_of(3 * 1024 * 1024);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc/safety.echoBlob")
+                    .header("content-type", "application/json")
+                    .header("content-length", body.len().to_string())
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_no_body_limit_accepts_any_size() {
+        let app = TeleportRouter::new()
+            .state(Arc::new(AppState))
+            .no_body_limit()
+            .mount();
+
+        // 5 MiB — well over the 2 MiB default; only succeeds if the limit
+        // is fully removed.
+        let body = payload_of(5 * 1024 * 1024);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc/safety.echoBlob")
+                    .header("content-type", "application/json")
+                    .header("content-length", body.len().to_string())
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_panicking_handler_returns_500() {
+        let body = serde_json::to_vec(&LargePayload {
+            blob: "small".to_owned(),
+        })
+        .unwrap();
+        let response = default_app()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc/safety.boom")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = std::str::from_utf8(&bytes).unwrap();
+        // Panic payload must NOT leak into the response body.
+        assert!(
+            !body_str.contains("boom"),
+            "response body leaked panic payload: {body_str}"
+        );
+        assert!(
+            body_str.contains("internal server error"),
+            "response body missing generic error message: {body_str}"
+        );
+    }
+
+    // `test_no_catch_panic_escape_hatch`: a real end-to-end test of this
+    // requires either spawning a subprocess (a panicking handler aborts the
+    // current test process) or relying on `catch_unwind`, which doesn't
+    // exercise the same code path tower-http uses internally. We instead
+    // verify the builder method exists and constructs a router successfully;
+    // the actual "panic propagates" behaviour is integration-tested manually.
+    #[tokio::test]
+    async fn test_no_catch_panic_escape_hatch_builds() {
+        let _app = TeleportRouter::new()
+            .state(Arc::new(AppState))
+            .no_catch_panic()
+            .mount();
+        // integration-tested manually
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fallible auth middleware (try_auth) — Unit 2
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::panic)]
+mod try_auth_mod {
+    use std::sync::Arc;
+
+    use axum::body::Body;
+    use http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    use teleport::{AppError, TeleportRouter, remote};
+
+    use super::AppState;
+
+    // A dummy user type. We don't extract it in the procedure — we just care
+    // about the middleware's short-circuit behaviour vs. pass-through.
+    #[derive(Debug, Clone)]
+    struct BannedUser;
+
+    #[remote(query, prefix = "tryauth")]
+    async fn get_secret(_ctx: &AppState) -> Result<String, AppError> {
+        Ok("secret-value".to_owned())
+    }
+
+    fn app_with_try_auth() -> axum::Router {
+        TeleportRouter::new()
+            .state(Arc::new(AppState))
+            .try_auth(
+                "session",
+                |_token: String, _state: Arc<AppState>| async move {
+                    // Any token is rejected with Forbidden to exercise the
+                    // short-circuit path.
+                    Err::<BannedUser, _>(AppError::<()>::Forbidden)
+                },
+            )
+            .mount()
+    }
+
+    #[tokio::test]
+    async fn test_try_auth_custom_rejection() {
+        // With a cookie present, the validator runs and returns Forbidden;
+        // the middleware must short-circuit with a 403 response.
+        let response = app_with_try_auth()
+            .oneshot(
+                Request::builder()
+                    .uri("/rpc/tryauth.getSecret")
+                    .header("cookie", "session=any-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // With no cookie, the validator is never invoked and the request
+        // passes through to the procedure, which returns the secret.
+        let response = app_with_try_auth()
+            .oneshot(
+                Request::builder()
+                    .uri("/rpc/tryauth.getSecret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let secret: String = serde_json::from_slice(&body).unwrap();
+        assert_eq!(secret, "secret-value");
+    }
 }

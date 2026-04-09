@@ -3,6 +3,12 @@ name = "teleport-macros"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Proc macros for teleport-rs (#[remote] and #[teleport_type]). Use via the `teleport` crate."
+readme = "../../README.md"
 
 [lib]
 proc-macro = true

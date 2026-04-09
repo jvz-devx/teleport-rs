@@ -13,8 +13,9 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "test": "npx tsx --test src/__tests__/*.test.ts",
-    "prepublishOnly": "npm run build"
+    "test": "bun test src/__tests__/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "qs": "^6.13.0"

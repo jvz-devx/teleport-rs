@@ -3,11 +3,21 @@ name = "teleport-build"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "TypeScript codegen for teleport-rs. Consumes procedure metadata and writes client.ts / errors.ts / types.ts."
+readme = "../../README.md"
 
 [dependencies]
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-teleport-core = { path = "../teleport-core" }
+teleport-core = { version = "0.1.0", path = "../teleport-core" }
 inventory = { workspace = true }
+
+[dev-dependencies]
+insta = "1"
+tempfile = "3"

@@ -143,6 +143,9 @@ mod tests {
 
     #[test]
     fn namespace_nested() {
-        assert_eq!(split_namespace("api.users.getUser"), ("api.users", "getUser"));
+        assert_eq!(
+            split_namespace("api.users.getUser"),
+            ("api.users", "getUser")
+        );
     }
 }

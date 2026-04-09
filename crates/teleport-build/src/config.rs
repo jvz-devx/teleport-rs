@@ -85,7 +85,7 @@ impl Default for Naming {
 /// Case convention for TypeScript identifiers.
 ///
 /// Currently only `CamelCase` is supported. This enum exists as an
-/// extension point for future naming strategies (e.g. PascalCase, snake_case passthrough).
+/// extension point for future naming strategies (e.g. `PascalCase`, `snake_case` passthrough).
 #[derive(Debug, Clone, Copy, Default)]
 #[non_exhaustive]
 pub enum NamingCase {

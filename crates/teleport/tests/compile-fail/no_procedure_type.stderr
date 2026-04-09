@@ -1,4 +1,7 @@
-error: missing procedure type: expected `query`, `command`, or `form`
+error: #[remote] requires a procedure type. Use one of:
+         • #[remote(query)]   — GET endpoint, input from query string
+         • #[remote(command)] — POST endpoint, JSON body
+         • #[remote(form)]    — POST endpoint, form-urlencoded or JSON body
  --> tests/compile-fail/no_procedure_type.rs:6:1
   |
 6 | #[remote]

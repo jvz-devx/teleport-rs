@@ -1,6 +1,6 @@
 #![allow(clippy::unused_async)]
 
-use teleport::{remote, AppError, AuthedUser};
+use teleport::{AppError, AuthedUser, remote};
 
 use crate::state::AppState;
 use crate::types::{CreatePostRequest, Post};

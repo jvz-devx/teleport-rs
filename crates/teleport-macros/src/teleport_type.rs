@@ -10,24 +10,37 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     if !attr.is_empty() {
         return Err(syn::Error::new_spanned(
             attr,
-            "`#[teleport_type]` does not accept arguments",
+            "`#[teleport_type]` does not accept arguments\n  \
+             write `#[teleport_type]` on its own, directly above the struct or enum",
         ));
     }
 
     let item: Item = parse2(item)?;
 
-    match &item {
-        Item::Struct(_) | Item::Enum(_) => {}
-        _ => {
-            return Err(syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "`#[teleport_type]` can only be applied to structs and enums",
-            ));
-        }
+    if matches!(item, Item::Struct(_) | Item::Enum(_)) {
+        return Ok(quote! {
+            #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+            #item
+        });
     }
 
-    Ok(quote! {
-        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
-        #item
-    })
+    let kind = match &item {
+        Item::Fn(_) => "a function",
+        Item::Impl(_) => "an impl block",
+        Item::Mod(_) => "a module",
+        Item::Trait(_) => "a trait",
+        Item::Type(_) => "a type alias",
+        Item::Union(_) => "a union",
+        Item::Const(_) => "a const",
+        Item::Static(_) => "a static",
+        _ => "this item",
+    };
+
+    Err(syn::Error::new(
+        proc_macro2::Span::call_site(),
+        format!(
+            "`#[teleport_type]` can only be applied to structs or enums, not {kind}\n  \
+             move the attribute to a struct or enum definition that should be exposed to TypeScript"
+        ),
+    ))
 }

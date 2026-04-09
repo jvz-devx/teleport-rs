@@ -1,5 +1,9 @@
 # teleport-rs
 
+[![CI](https://github.com/jvz-devx/teleport-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/jvz-devx/teleport-rs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust 1.93+](https://img.shields.io/badge/rust-1.93+-orange.svg)](https://www.rust-lang.org)
+
 Write a Rust function, call it from TypeScript. Full type safety, zero config files.
 
 ## What it does
@@ -58,19 +62,26 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 ```
 
-For your frontend:
+For your frontend (bun, pnpm, or npm — all work):
 
 ```bash
-npm install @teleport-rs/client @teleport-rs/vite
+bun add @teleport-rs/client @teleport-rs/vite
 ```
 
 ## Getting Started
 
 See [docs/getting-started.md](docs/getting-started.md) for a full walkthrough.
 
-## Architecture
+- Start from the minimal example: [`examples/starter/`](examples/starter/)
+- Fuller walkthrough with auth, modules, and typed errors: [`examples/demo/`](examples/demo/)
 
-See [docs/architecture.md](docs/architecture.md) for design decisions and crate structure.
+## Documentation
+
+- [Architecture](docs/architecture.md) — design decisions and crate structure
+- [Error handling](docs/error-handling.md) — `AppError<T>` variants, typed details, `try_auth`
+- [Feature flags](docs/feature-flags.md) — `export` and `debug-manifest`
+- [Security](docs/security.md) — production checklist (body limits, panic recovery, CORS)
+- [Changelog](CHANGELOG.md)
 
 ## License
 

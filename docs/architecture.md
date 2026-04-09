@@ -78,6 +78,15 @@ Browser → SvelteKit BFF → Rust (teleport-rs)
 
 Query procedures use GET with `serde_qs` for structured query params. Command procedures use POST with JSON body. Form procedures use POST and accept both `application/x-www-form-urlencoded` and JSON via the `FormOrJson` extractor.
 
+## Auto-applied safety layers
+
+`TeleportRouter::mount()` wraps every router it returns in two tower layers before the final `with_state`:
+
+1. **`tower_http::limit::RequestBodyLimitLayer`**, configured from `DEFAULT_BODY_LIMIT` (2 MiB) unless overridden with `.body_limit(bytes)` or removed with `.no_body_limit()`. `mount()` also applies axum's `DefaultBodyLimit::max(bytes)` so `Json`/`Form`/`Bytes` extractors honour the same limit (axum's extractors otherwise enforce their own internal 2 MiB default). Oversized requests are rejected with `413 Payload Too Large` before any handler runs.
+2. **`tower_http::catch_panic::CatchPanicLayer`**, wrapping the router so that a panic in any `#[remote]` handler returns a generic JSON `500` and logs the payload to stderr instead of crashing the process. Opt out with `.no_catch_panic()` if you want panics to propagate (for example, under a supervisor).
+
+The layers are opt-out, not opt-in — the escape hatches are deliberately loud (`no_body_limit`, `no_catch_panic`) so a reviewer can spot them in a diff. See [`security.md`](security.md) for the production rationale and [`feature-flags.md`](feature-flags.md) for how the manifest endpoint interacts with these layers.
+
 ## Auth Middleware
 
 Auth is configured on `TeleportRouter` with a cookie name and validator closure. The validator is generic — it returns `Option<U>` for any user type `U: Clone + Send + Sync + 'static`:

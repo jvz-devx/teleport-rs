@@ -102,12 +102,45 @@ async fn main() {
 - `client.ts` — typed RPC functions grouped by module
 - `errors.ts` — error types matching your `AppError<T>` variants
 
+### Safety defaults
+
+`TeleportRouter::mount()` applies two safety layers to every router it
+builds:
+
+1. A **2 MiB request body size limit**
+   (`tower_http::limit::RequestBodyLimitLayer`). Requests with larger
+   bodies are rejected with `413 Payload Too Large` before any handler
+   runs. Override with `.body_limit(bytes)` (for example, an upload
+   procedure that needs 10 MiB) or disable entirely with
+   `.no_body_limit()`.
+2. **Panic recovery** via `tower_http::catch_panic::CatchPanicLayer`.
+   A panic in any handler returns a generic JSON `500` instead of
+   crashing the process. Opt out with `.no_catch_panic()` if you want
+   panics to propagate (for example, under a supervisor that restarts
+   on every crash).
+
+```rust,ignore
+let app = TeleportRouter::new()
+    .state(state)
+    .body_limit(10 * 1024 * 1024)  // 10 MiB
+    .mount();
+
+// or, if you fully trust every client of this router:
+let app = TeleportRouter::new()
+    .state(state)
+    .no_body_limit()
+    .no_catch_panic()
+    .mount();
+```
+
+See [`security.md`](security.md) for the full production checklist.
+
 ## 5. Set up the frontend
 
-Install the npm packages:
+Install the packages (bun, pnpm, or npm — all work):
 
 ```bash
-npm install @teleport-rs/client @teleport-rs/vite
+bun add @teleport-rs/client @teleport-rs/vite
 ```
 
 Configure the Vite plugin in `vite.config.ts`:
@@ -171,7 +204,45 @@ async fn get_profile(ctx: &AppState, #[auth] user: MyUser) -> Result<User, AppEr
 }
 ```
 
-The built-in `AuthedUser` type still works by convention (no `#[auth]` attribute needed). Use `Option<T>` for optional auth.
+> **Note:** `AuthedUser` is the built-in convention type — extractors find it
+> automatically by type name, so you do not need to annotate it. For any
+> *custom* user type, the explicit `#[auth]` parameter attribute is required:
+>
+> ```rust,ignore
+> #[remote(query)]
+> async fn me(ctx: &AppState, #[auth] user: MyUser) -> Result<MyUser, AppError> { ... }
+> ```
+>
+> Without the attribute, `MyUser` would be treated as an ordinary
+> deserializable input parameter. Use `Option<T>` (with or without `#[auth]`
+> depending on the type) for optional authentication.
+
+### Rejecting requests in auth
+
+The `.auth()` validator returns `Option<U>` — `None` passes through
+silently, letting extractors surface a plain `401 Unauthorized`. For
+more control (for example, returning `403 Forbidden` for banned users),
+use `.try_auth()` instead. The validator returns `Result<U, AppError<E>>`
+and the middleware short-circuits the request with the error response:
+
+```rust,ignore
+use teleport::{AppError, TeleportRouter};
+
+let app = TeleportRouter::new()
+    .state(Arc::clone(&state))
+    .try_auth("session", |token: String, state: Arc<AppState>| async move {
+        match state.validate_session(&token).await {
+            Some(user) if user.banned => Err(AppError::<()>::Forbidden),
+            Some(user) => Ok(user),
+            None => Err(AppError::<()>::Unauthorized),
+        }
+    })
+    .mount();
+```
+
+See [`error-handling.md`](error-handling.md) for the full story on
+`AppError<T>` variants, HTTP status mapping, and when to use `try_auth`
+over `auth`.
 
 ## 7. Typed errors
 

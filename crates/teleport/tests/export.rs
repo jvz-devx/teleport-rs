@@ -3,12 +3,14 @@
 //! Defines procedures with `#[remote]`, collects them via `inventory`,
 //! and verifies the generated TypeScript files using `export_from_inventory`.
 
-#![allow(clippy::expect_used)]
+// `#[remote]` requires `async` even when the body has no `.await`; test
+// fixtures are synchronous so silence `unused_async` at the file level.
+#![allow(clippy::expect_used, clippy::unused_async)]
 
 use std::sync::Arc;
 
-use teleport::{remote, teleport_type, AppError, TeleportRouter};
-use teleport_build::{Config, Naming, NamespaceStyle};
+use teleport::{AppError, TeleportRouter, remote, teleport_type};
+use teleport_build::Config;
 
 // ---------------------------------------------------------------------------
 // Test types
@@ -53,10 +55,7 @@ async fn get_user(_ctx: &TestState, _input: User) -> Result<User, AppError<GetUs
 
 /// Create a new user account.
 #[remote(command)]
-async fn create_user(
-    _ctx: &TestState,
-    _input: CreateUserRequest,
-) -> Result<User, AppError> {
+async fn create_user(_ctx: &TestState, _input: CreateUserRequest) -> Result<User, AppError> {
     Ok(User {
         id: "2".into(),
         name: "Bob".into(),
@@ -85,20 +84,22 @@ fn full_pipeline_generates_ts_files() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::export_from_inventory(&config)
-        .expect("generation should succeed");
+    teleport_build::export_from_inventory(&config).expect("generation should succeed");
 
-    let types_ts = std::fs::read_to_string(tmp.path().join("types.ts"))
-        .expect("types.ts should exist");
-    let errors_ts = std::fs::read_to_string(tmp.path().join("errors.ts"))
-        .expect("errors.ts should exist");
-    let client_ts = std::fs::read_to_string(tmp.path().join("client.ts"))
-        .expect("client.ts should exist");
-    let index_ts = std::fs::read_to_string(tmp.path().join("index.ts"))
-        .expect("index.ts should exist");
+    let types_ts =
+        std::fs::read_to_string(tmp.path().join("types.ts")).expect("types.ts should exist");
+    let errors_ts =
+        std::fs::read_to_string(tmp.path().join("errors.ts")).expect("errors.ts should exist");
+    let client_ts =
+        std::fs::read_to_string(tmp.path().join("client.ts")).expect("client.ts should exist");
+    let index_ts =
+        std::fs::read_to_string(tmp.path().join("index.ts")).expect("index.ts should exist");
 
     // types.ts should contain our registered structs.
-    assert!(types_ts.contains("User"), "types.ts missing User:\n{types_ts}");
+    assert!(
+        types_ts.contains("User"),
+        "types.ts missing User:\n{types_ts}"
+    );
     assert!(
         types_ts.contains("CreateUserRequest"),
         "types.ts missing CreateUserRequest:\n{types_ts}"
@@ -161,11 +162,10 @@ fn generated_client_has_correct_methods() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::export_from_inventory(&config)
-        .expect("generation should succeed");
+    teleport_build::export_from_inventory(&config).expect("generation should succeed");
 
-    let client_ts = std::fs::read_to_string(tmp.path().join("client.ts"))
-        .expect("client.ts should exist");
+    let client_ts =
+        std::fs::read_to_string(tmp.path().join("client.ts")).expect("client.ts should exist");
 
     // get_user is a query → GET
     assert!(
@@ -197,11 +197,10 @@ fn generated_errors_has_procedure_specific_aliases() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::export_from_inventory(&config)
-        .expect("generation should succeed");
+    teleport_build::export_from_inventory(&config).expect("generation should succeed");
 
-    let errors_ts = std::fs::read_to_string(tmp.path().join("errors.ts"))
-        .expect("errors.ts should exist");
+    let errors_ts =
+        std::fs::read_to_string(tmp.path().join("errors.ts")).expect("errors.ts should exist");
 
     // get_user has AppError<GetUserError> — should produce an error alias.
     assert!(
@@ -212,9 +211,7 @@ fn generated_errors_has_procedure_specific_aliases() {
 
 #[test]
 fn router_mounts_collected_procedures() {
-    let router = TeleportRouter::new()
-        .state(Arc::new(TestState))
-        .mount();
+    let router = TeleportRouter::new().state(Arc::new(TestState)).mount();
 
     // The router should have been built successfully.
     // We can't easily inspect routes, but we verify it doesn't panic
@@ -227,18 +224,16 @@ fn idempotent_generation() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let config = test_config(tmp.path().to_path_buf());
 
-    teleport_build::export_from_inventory(&config)
-        .expect("first generation should succeed");
+    teleport_build::export_from_inventory(&config).expect("first generation should succeed");
 
-    let types_first = std::fs::read_to_string(tmp.path().join("types.ts"))
-        .expect("types.ts should exist");
+    let types_first =
+        std::fs::read_to_string(tmp.path().join("types.ts")).expect("types.ts should exist");
 
     // Run generation again — files should not change.
-    teleport_build::export_from_inventory(&config)
-        .expect("second generation should succeed");
+    teleport_build::export_from_inventory(&config).expect("second generation should succeed");
 
-    let types_second = std::fs::read_to_string(tmp.path().join("types.ts"))
-        .expect("types.ts should exist");
+    let types_second =
+        std::fs::read_to_string(tmp.path().join("types.ts")).expect("types.ts should exist");
 
     assert_eq!(types_first, types_second, "generation should be idempotent");
 }
