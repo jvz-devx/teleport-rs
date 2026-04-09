@@ -257,6 +257,12 @@ fn repo_root() -> std::path::PathBuf {
 
 /// `tsconfig.json` that points `@teleport-rs/client` at the stub `.d.ts`
 /// and type-checks every generated file under strict settings.
+///
+/// Note: no `baseUrl`. TypeScript 6.0 deprecated `baseUrl` into a hard
+/// error, and since TS 4.1 `paths` values resolve relative to the
+/// tsconfig.json location when `baseUrl` is unset. That's exactly the
+/// behaviour we want here — the stub lives next to the tsconfig in the
+/// tempdir. Working with both old and new TS versions is a feature.
 const TSCONFIG_JSON: &str = r#"{
   "compilerOptions": {
     "target": "ES2022",
@@ -267,7 +273,6 @@ const TSCONFIG_JSON: &str = r#"{
     "skipLibCheck": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
     "paths": {
       "@teleport-rs/client": ["./teleport_rs_client_stub.d.ts"]
     }
