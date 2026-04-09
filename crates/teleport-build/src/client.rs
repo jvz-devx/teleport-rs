@@ -75,7 +75,15 @@ pub(crate) fn generate_client(
     }
 
     // Remove primitive type names from imports (they don't need importing).
-    type_imports.retain(|name| !crate::ts_utils::is_ts_primitive(name));
+    // `is_ts_stdlib_wrapper` is a defence-in-depth filter: even though
+    // `datatype_to_ts` translates `Vec<T>` / `String` / `HashMap<K,V>` /
+    // etc. into inline TS constructs, these names may still be collected
+    // by `collect_type_names` below because specta registers them as
+    // `NamedDataType`s. Scrub them here so they never appear in the
+    // `import type { … } from "./types"` line.
+    type_imports.retain(|name| {
+        !crate::ts_utils::is_ts_primitive(name) && !crate::ts_utils::is_ts_stdlib_wrapper(name)
+    });
 
     // Build output.
     let mut out = String::with_capacity(2048);

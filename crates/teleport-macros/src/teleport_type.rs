@@ -6,6 +6,27 @@ use syn::{Item, Result, parse2};
 ///
 /// Prepends `#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]`
 /// to the annotated struct or enum.
+///
+/// # Expands to
+///
+/// `#[teleport_type]` adds these derives automatically:
+///
+/// - `Debug`
+/// - `Clone`
+/// - `serde::Serialize`
+/// - `serde::Deserialize`
+/// - `specta::Type`
+///
+/// **Do NOT add any of these derives yourself** — you will hit E0119
+/// (conflicting implementations). If you need `PartialEq`, `Eq`, `Hash`,
+/// etc., add those as a separate `#[derive(...)]` line alongside
+/// `#[teleport_type]`:
+///
+/// ```ignore
+/// #[teleport_type]
+/// #[derive(PartialEq, Eq, Hash)]
+/// pub struct UserId(pub String);
+/// ```
 pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     if !attr.is_empty() {
         return Err(syn::Error::new_spanned(

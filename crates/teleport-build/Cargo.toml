@@ -1,6 +1,6 @@
 [package]
 name = "teleport-build"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-teleport-core = { version = "0.1.0", path = "../teleport-core" }
+teleport-core = { version = "0.1.1", path = "../teleport-core" }
 inventory = { workspace = true }
 
 [dev-dependencies]

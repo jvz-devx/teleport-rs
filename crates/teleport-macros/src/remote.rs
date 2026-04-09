@@ -442,6 +442,31 @@ fn extract_doc(func: &ItemFn) -> String {
 // ---------------------------------------------------------------------------
 
 /// Expand the `#[remote(query|command|form)]` attribute macro.
+///
+/// # Attribute keys
+///
+/// In addition to the procedure type (`query`, `command`, or `form`), the
+/// attribute accepts two optional `key = "value"` overrides:
+///
+/// - `prefix = "..."` — overrides the default namespace (derived from
+///   `module_path!()`) with an explicit string. Use this to get clean
+///   namespaces like `users.getUser` in single-file apps where the default
+///   would otherwise be `{crate_name}.get_user`.
+/// - `name = "..."` — overrides the default procedure name (derived from
+///   the Rust function name, converted to `camelCase`) with an explicit
+///   string. Combined with `prefix`, this gives full control over the
+///   generated TypeScript identifier.
+///
+/// ```ignore
+/// // Default: namespace comes from module_path!(), name from fn ident.
+/// // e.g. in `src/main.rs`, this becomes `my_app.getUser`.
+/// #[remote(query)]
+/// async fn get_user(ctx: &AppState, input: GetUserInput) -> Result<User, AppError> { ... }
+///
+/// // Overridden: forces `users.getUser` regardless of module path.
+/// #[remote(query, prefix = "users", name = "getUser")]
+/// async fn get_user(ctx: &AppState, input: GetUserInput) -> Result<User, AppError> { ... }
+/// ```
 pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let remote_attr = parse_attr(attr)?;
     let func: ItemFn = parse2(item)?;

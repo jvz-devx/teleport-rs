@@ -104,9 +104,19 @@ fn generate(
 ) -> Result<(), GenerateError> {
     std::fs::create_dir_all(&config.output_dir).map_err(GenerateError::CreateDir)?;
 
-    let types_content = typescript::generate_types(resolved_types)?;
-    let errors_content = errors::generate_errors(procedures, config, resolved_types)?;
-    let client_content = client::generate_client(procedures, config, resolved_types)?;
+    // Wrap each generator call with a "while generating X" context so
+    // the raw `TypeExport("Attempted to export \"\"…")` message from
+    // specta-typescript gains enough breadcrumbs for users to find the
+    // offending module. We can't attach per-procedure context without a
+    // wider refactor of the generator call sites, but the coarse-grained
+    // file label is enough to triage.
+    let types_content = with_context("types.ts", || typescript::generate_types(resolved_types))?;
+    let errors_content = with_context("errors.ts", || {
+        errors::generate_errors(procedures, config, resolved_types)
+    })?;
+    let client_content = with_context("client.ts", || {
+        client::generate_client(procedures, config, resolved_types)
+    })?;
 
     write_if_changed(&config.output_dir.join("types.ts"), &types_content)?;
     write_if_changed(&config.output_dir.join("errors.ts"), &errors_content)?;
@@ -122,6 +132,28 @@ export * from \"./client\";
     write_if_changed(&config.output_dir.join("index.ts"), index_content)?;
 
     Ok(())
+}
+
+/// Run `f` and, if it returns `GenerateError::TypeExport`, prepend a
+/// `while generating <file>` breadcrumb to the error message.
+///
+/// This exists because `specta-typescript` sometimes surfaces errors
+/// with an empty path (notably the "Attempted to export \"\" but
+/// Specta forbids exporting `BigInt`-style types" message). Without
+/// breadcrumbs, users have no way to map that back to which of the four
+/// generated files the problem came from. The `BigInt` rewrite in
+/// [`typescript::generate_types`] eliminates the common cause, but the
+/// wrapper is cheap and still helps for unexpected failures.
+fn with_context<F>(file: &'static str, f: F) -> Result<String, GenerateError>
+where
+    F: FnOnce() -> Result<String, GenerateError>,
+{
+    f().map_err(|e| match e {
+        GenerateError::TypeExport(msg) => {
+            GenerateError::TypeExport(format!("while generating {file}: {msg}"))
+        }
+        other => other,
+    })
 }
 
 /// Write `content` to `path` only if the file does not already contain the
