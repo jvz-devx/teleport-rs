@@ -1,30 +1,15 @@
 <script lang="ts">
-	import { getUsers } from '$lib/server/data.remote';
-	import { onMount } from 'svelte';
+	import type { User } from '$lib/api';
+	import type { PageData } from './$types';
 
-	let users = $state<{ id: string; name: string; email: string }[]>([]);
-	let error = $state<string | null>(null);
-	let loading = $state(true);
-
-	onMount(async () => {
-		try {
-			users = await getUsers();
-		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to load users';
-		} finally {
-			loading = false;
-		}
-	});
+	let { data }: { data: PageData } = $props();
+	const users = $derived(data.users as User[]);
 </script>
 
 <h1>teleport-rs Demo</h1>
 <p>Users fetched from a Rust backend via generated TypeScript client.</p>
 
-{#if loading}
-	<p>Loading users...</p>
-{:else if error}
-	<p class="error">Error: {error}</p>
-{:else if users.length === 0}
+{#if users.length === 0}
 	<p>No users found.</p>
 {:else}
 	<ul>
@@ -35,7 +20,4 @@
 {/if}
 
 <style>
-	.error {
-		color: crimson;
-	}
 </style>

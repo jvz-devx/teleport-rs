@@ -1,7 +1,7 @@
 // TypeScript client function generation.
 //
 // Generates `client.ts` with tree-shakeable individual function exports
-// and ergonomic namespace objects that reference them.
+// and an ergonomic `bindClient(client)` wrapper.
 // Imports from `types.ts` and `errors.ts`.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -107,9 +107,11 @@ pub(crate) fn generate_client(
         .as_deref()
         .unwrap_or("@teleport-rs/client");
 
-    // Import rpc and RpcResult from the client runtime package.
-    let _ = writeln!(out, "import {{ rpc }} from \"{client_path}\";",);
-    let _ = writeln!(out, "import type {{ RpcResult }} from \"{client_path}\";",);
+    // Import RpcResult and TeleportClient from the client runtime package.
+    let _ = writeln!(
+        out,
+        "import type {{ RpcResult, TeleportClient }} from \"{client_path}\";",
+    );
 
     // Import data types from types.ts.
     if !type_imports.is_empty() {
@@ -141,7 +143,10 @@ pub(crate) fn generate_client(
             let param = entry
                 .input_ts
                 .as_ref()
-                .map_or_else(String::new, |ts| format!("input: {ts}"));
+                .map_or_else(
+                    || "client: Pick<TeleportClient, \"rpc\">".to_owned(),
+                    |ts| format!("client: Pick<TeleportClient, \"rpc\">, input: {ts}"),
+                );
 
             let rpc_arg = if entry.input_ts.is_some() {
                 "input"
@@ -151,7 +156,7 @@ pub(crate) fn generate_client(
 
             let _ = writeln!(
                 out,
-                "export function {ns}_{name}({param}): Promise<RpcResult<{output}, {error}>> {{\n  return rpc(\"{method}\", \"{path}\", {rpc_arg});\n}}",
+                "export function {ns}_{name}({param}): Promise<RpcResult<{output}, {error}>> {{\n  return client.rpc(\"{method}\", \"{path}\", {rpc_arg});\n}}",
                 ns = ns_name,
                 name = entry.method_name,
                 output = entry.output_ts,
@@ -162,17 +167,33 @@ pub(crate) fn generate_client(
         }
     }
 
-    // Generate ergonomic namespace objects that reference the functions above.
+    out.push('\n');
+    out.push_str(
+        "export function bindClient(client: Pick<TeleportClient, \"rpc\">) {\n  return {\n",
+    );
+
     for (ns_name, entries) in &namespaces {
-        out.push('\n');
-        let _ = writeln!(out, "export const {ns_name} = {{");
+        let _ = writeln!(out, "    {ns_name}: {{");
 
         for (i, entry) in entries.iter().enumerate() {
+            let param = entry
+                .input_ts
+                .as_ref()
+                .map_or_else(String::new, |ts| format!("input: {ts}"));
+            let rpc_arg = if entry.input_ts.is_some() {
+                "input"
+            } else {
+                "undefined"
+            };
+
             let _ = write!(
                 out,
-                "  {name}: {ns}_{name}",
+                "      {name}({param}) {{ return client.rpc<{output}, {error}>(\"{method}\", \"{path}\", {rpc_arg}); }}",
                 name = entry.method_name,
-                ns = ns_name,
+                output = entry.output_ts,
+                error = entry.error_ts,
+                method = entry.http_method,
+                path = entry.path,
             );
 
             if i < entries.len() - 1 {
@@ -182,8 +203,10 @@ pub(crate) fn generate_client(
             }
         }
 
-        out.push_str("};\n");
+        out.push_str("    },\n");
     }
+
+    out.push_str("  };\n}\n");
 
     Ok(out)
 }
@@ -344,11 +367,10 @@ mod tests {
 
         // Tree-shakeable function export.
         assert!(output.contains("export function users_getUser("));
-        assert!(output.contains("rpc(\"GET\""));
+        assert!(output.contains("client.rpc(\"GET\""));
         assert!(output.contains("/rpc/users.getUser"));
-        // Namespace object references the function.
-        assert!(output.contains("export const users = {"));
-        assert!(output.contains("getUser: users_getUser"));
+        assert!(output.contains("export function bindClient("));
+        assert!(output.contains("client.rpc<TestUser, never>(\"GET\", \"/rpc/users.getUser\", input)"));
         assert!(output.contains("@teleport-rs/client"));
     }
 
@@ -371,7 +393,11 @@ mod tests {
         let output = generate_client(&[proc], &config, &resolved).expect("should generate");
 
         assert!(output.contains("undefined"));
-        assert!(output.contains("export function health_check():"));
-        assert!(output.contains("check: health_check"));
+        assert!(output.contains("export function health_check(client: Pick<TeleportClient, \"rpc\">):"));
+        assert!(
+            output.contains(
+                "check() { return client.rpc<string, never>(\"GET\", \"/rpc/health.check\", undefined); }"
+            )
+        );
     }
 }

@@ -7,10 +7,66 @@ export interface TeleportClient {
   readonly config: Readonly<RpcConfig>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isAppErrorPayload(value: unknown): value is AppError<unknown> {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+
+  switch (value.type) {
+    case "Unauthorized":
+    case "Forbidden":
+    case "NotFound":
+    case "RateLimited":
+      return true;
+    case "BadRequest":
+    case "Internal":
+      return typeof value.message === "string";
+    case "Detail":
+      return "detail" in value;
+    default:
+      return false;
+  }
+}
+
+function matchesAppErrorStatus(error: AppError<unknown>, status: number): boolean {
+  switch (error.type) {
+    case "Unauthorized":
+      return status === 401;
+    case "Forbidden":
+      return status === 403;
+    case "NotFound":
+      return status === 404;
+    case "BadRequest":
+      return status === 400;
+    case "Internal":
+      return status === 500;
+    case "RateLimited":
+      return status === 429;
+    case "Detail":
+      return status === 422;
+  }
+}
+
 export function createClient(config: RpcConfig): TeleportClient {
   return {
     config,
     async rpc<T, E>(method: HttpMethod, path: string, input: unknown): Promise<RpcResult<T, E>> {
+      const fetchImpl = config.fetch ?? globalThis.fetch;
+
+      if (!fetchImpl) {
+        const transportError: TransportError = {
+          type: "NetworkError",
+          message:
+            "No fetch implementation available. Provide RpcConfig.fetch or use a runtime with global fetch.",
+        };
+        config.onError?.({ type: "transport", error: transportError });
+        return { kind: "transport", ok: false, transport: transportError };
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
@@ -39,25 +95,36 @@ export function createClient(config: RpcConfig): TeleportClient {
           init.body = JSON.stringify(input);
         }
 
-        const response = await fetch(url, init);
+        const response = await fetchImpl(url, init);
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+          const body = await response.text();
+
           try {
-            const errorBody = await response.json();
-            const result = { kind: "error" as const, ok: false as const, error: errorBody as AppError<E> };
-            config.onError?.({ type: "app", error: errorBody as AppError<unknown> });
-            return result;
+            const parsed = body ? JSON.parse(body) : null;
+
+            if (isAppErrorPayload(parsed) && matchesAppErrorStatus(parsed, response.status)) {
+              const result = {
+                kind: "error" as const,
+                ok: false as const,
+                error: parsed as AppError<E>,
+              };
+              config.onError?.({ type: "app", error: parsed });
+              return result;
+            }
           } catch {
-            const transportError: TransportError = {
-              type: "ServerError",
-              status: response.status,
-              body: await response.text(),
-            };
-            config.onError?.({ type: "transport", error: transportError });
-            return { kind: "transport", ok: false, transport: transportError };
+            // Fall through to a transport-level server failure.
           }
+
+          const transportError: TransportError = {
+            type: "ServerError",
+            status: response.status,
+            body,
+          };
+          config.onError?.({ type: "transport", error: transportError });
+          return { kind: "transport", ok: false, transport: transportError };
         }
 
         const text = await response.text();

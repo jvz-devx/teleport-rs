@@ -250,7 +250,7 @@ async fn main() {
 
 `TeleportRouter::export()` writes three files to the output directory:
 - `types.ts` — all your Rust types as TypeScript interfaces
-- `client.ts` — typed RPC functions grouped by module
+- `client.ts` — explicit-client RPC helpers plus `bindClient(client)` for namespaced frontend calls
 - `errors.ts` — error types matching your `AppError<T>` variants
 
 ### Safety defaults
@@ -288,10 +288,10 @@ See [`security.md`](security.md) for the full production checklist.
 
 ## 6. Set up the frontend
 
-Install the packages (bun, pnpm, or npm — all work):
+Install the frontend packages:
 
 ```bash
-bun add @teleport-rs/client @teleport-rs/vite
+npm install @teleport-rs/client @teleport-rs/vite
 ```
 
 Configure the Vite plugin in `vite.config.ts`:
@@ -311,9 +311,17 @@ export default {
 Use the generated client:
 
 ```typescript
-import { users } from "./generated/client";
+import { createClient } from "@teleport-rs/client";
+import { bindClient } from "./generated/client";
 
-const result = await users.getUser("123");
+const client = createClient({
+    baseUrl: "http://localhost:3000",
+    credentials: "include",
+});
+
+const { users } = bindClient(client);
+
+const result = await users.getUser({ id: "123" });
 if (result.ok) {
     console.log(result.data.name);
 } else if ("error" in result) {
@@ -490,6 +498,12 @@ async fn login(ctx: &AppState, input: LoginRequest) -> Result<LoginResponse, App
 On the TypeScript side, the error detail type flows through:
 
 ```typescript
+import { createClient } from "@teleport-rs/client";
+import { bindClient } from "./generated/client";
+
+const client = createClient({ baseUrl: "http://localhost:3000" });
+const { auth } = bindClient(client);
+
 const result = await auth.login({ email, password });
 if (!result.ok && "error" in result) {
     if (result.error.detail?.invalid_credentials) {

@@ -42,7 +42,7 @@ Type conversion from Rust to TypeScript is handled by [Specta](https://docs.rs/s
 
 Generated output:
 - `types.ts` — interfaces for all `#[teleport_type]` structs/enums
-- `client.ts` — RPC functions grouped by module namespace (e.g., `users.getUser`)
+- `client.ts` — explicit-client RPC helpers plus `bindClient(client)` namespaced wrappers (e.g., `users.getUser`)
 - `errors.ts` — `AppError<T>` union types matching Rust error variants
 
 ## Error Architecture
@@ -68,7 +68,7 @@ Browser → SvelteKit BFF → Rust (teleport-rs)
            (optional)
 ```
 
-1. Client calls a generated function (e.g., `users.getUser("123")`)
+1. Client calls a bound generated function (e.g., `users.getUser({ id: "123" })`)
 2. The client serializes input and sends an HTTP request (`GET /rpc/users.getUser?id=123`)
 3. Axum routes the request to the generated handler
 4. Auth middleware extracts and validates the session cookie (if the procedure requires `AuthedUser`)

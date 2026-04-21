@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, clippy::print_stdout)]
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use teleport::{ExportConfig, TeleportRouter};
 use tower_http::cors::CorsLayer;
@@ -11,8 +11,17 @@ mod types;
 
 #[tokio::main]
 async fn main() {
-    TeleportRouter::<state::AppState>::export(&ExportConfig::new("frontend/src/lib/api/generated"))
+    let export_only = std::env::args().any(|arg| arg == "--export-only");
+    let export_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("frontend/src/lib/api/generated");
+
+    TeleportRouter::<state::AppState>::export(&ExportConfig::new(&export_dir))
         .expect("failed to export TS bindings");
+
+    if export_only {
+        println!("Exported TypeScript bindings to {}", export_dir.display());
+        return;
+    }
 
     let state = Arc::new(state::AppState::new());
 

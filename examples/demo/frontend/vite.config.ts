@@ -6,7 +6,10 @@ export default defineConfig({
 	plugins: [
 		teleportVite({
 			bindingsPath: 'src/lib/api/generated',
-			generateOnStart: true,
+			generateOnStart: {
+				command: ['cargo', 'run', '-p', 'teleport-demo', '--bin', 'server', '--', '--export-only'],
+				cwd: '..',
+			},
 		}),
 		sveltekit(),
 	],

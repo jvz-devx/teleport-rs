@@ -134,12 +134,20 @@ fn full_pipeline_generates_ts_files() {
         "client.ts missing listUsers:\n{client_ts}"
     );
     assert!(
-        client_ts.contains("rpc(\"GET\""),
-        "client.ts missing GET rpc call:\n{client_ts}"
+        client_ts.contains("client.rpc(\"GET\""),
+        "client.ts missing GET client.rpc call:\n{client_ts}"
     );
     assert!(
-        client_ts.contains("rpc(\"POST\""),
-        "client.ts missing POST rpc call:\n{client_ts}"
+        client_ts.contains("client.rpc(\"POST\""),
+        "client.ts missing POST client.rpc call:\n{client_ts}"
+    );
+    assert!(
+        client_ts.contains("bindClient"),
+        "client.ts missing bindClient helper:\n{client_ts}"
+    );
+    assert!(
+        client_ts.contains("Pick<TeleportClient, \"rpc\">"),
+        "client.ts missing TeleportClient binder type:\n{client_ts}"
     );
 
     // index.ts should re-export all modules.
@@ -180,15 +188,20 @@ fn generated_client_has_correct_methods() {
     );
 
     // listUsers has no input → passes undefined
-    assert!(
-        client_ts.contains("undefined"),
-        "client.ts should pass undefined for no-input procedures"
-    );
+    assert!(client_ts.contains("undefined"), "client.ts should pass undefined for no-input procedures");
 
     // Should import from @teleport-rs/client
     assert!(
         client_ts.contains("@teleport-rs/client"),
         "client.ts should import from @teleport-rs/client"
+    );
+    assert!(
+        client_ts.contains("bindClient"),
+        "client.ts should include bindClient"
+    );
+    assert!(
+        !client_ts.contains("export const users = {"),
+        "client.ts should not emit clientless namespace objects"
     );
 }
 

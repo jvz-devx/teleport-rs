@@ -23,6 +23,17 @@ describe("rpcUnwrap", () => {
     assert.throws(() => rpcUnwrap(result), TeleportError);
   });
 
+  it("preserves typed variant checks on TeleportError", () => {
+    const err = new TeleportError<{ field: string }>({
+      type: "Detail",
+      detail: { field: "email" },
+    });
+
+    assert.strictEqual(err.is("Detail"), true);
+    assert.deepStrictEqual(err.detail, { field: "email" });
+    assert.strictEqual(err.is("NotFound"), false);
+  });
+
   it("throws TransportFailure on transport error", () => {
     const result: RpcResult<string> = {
       kind: "transport",

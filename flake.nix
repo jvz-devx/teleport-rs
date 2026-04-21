@@ -1,5 +1,5 @@
 {
-  description = "teleport-rs dev shell (Rust 1.91 MSRV + bun + CI tooling)";
+  description = "teleport-rs dev shell (Rust 1.93 MSRV + Node/npm + CI tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -44,11 +44,8 @@
           packages = with pkgs; [
             rustToolchain
 
-            # JavaScript side. Bun natively handles the monorepo's
-            # `workspace:*` protocol and hoists `tsc` into
-            # `node_modules/.bin/` after `bun install`, which is what
-            # the teleport-build snapshot test looks for.
-            bun
+            # JavaScript side.
+            nodejs
 
             # Matches the CI `cargo-deny` job.
             cargo-deny
@@ -71,7 +68,8 @@
             echo "teleport-rs dev shell"
             echo "  rustc : $(rustc --version)"
             echo "  cargo : $(cargo --version)"
-            echo "  bun   : $(bun --version)"
+            echo "  node  : $(node --version)"
+            echo "  npm   : $(npm --version)"
             echo ""
             echo "Run the full CI check suite locally:"
             echo "  cargo fmt --all --check"
@@ -80,8 +78,8 @@
             echo "  RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps"
             echo "  cargo check --workspace --all-features   # MSRV smoke test"
             echo "  cargo deny --all-features check"
-            echo "  bunx tsc --noEmit -p packages/client/tsconfig.json"
-            echo "  bunx tsc --noEmit -p packages/vite/tsconfig.json"
+            echo "  npm exec tsc --noEmit -p packages/client/tsconfig.json"
+            echo "  npm exec tsc --noEmit -p packages/vite/tsconfig.json"
             echo ""
           '';
         };

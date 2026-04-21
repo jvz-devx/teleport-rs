@@ -1,9 +1,9 @@
-// Re-export generated types and client namespaces.
+// Re-export generated types and errors from TeleportRouter::export().
 // The `generated/` directory is populated at server startup via TeleportRouter::export().
 export * from './generated/types';
 export * from './generated/errors';
-export { auth, users, posts } from './generated/client';
+export { api } from './config';
 
 // Re-export client utilities for convenience.
-export { configure, type RpcConfig, type RpcResult } from '@teleport-rs/client';
-export { isTransportError, isAppError, rpcUnwrap } from '@teleport-rs/client';
+export { createClient, type RpcConfig, type RpcResult } from '@teleport-rs/client';
+export { isTransportError, isAppError, rpcUnwrap, mapError } from '@teleport-rs/client';

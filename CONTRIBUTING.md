@@ -5,10 +5,9 @@
 - **Rust**: stable. MSRV is **1.93** (constrained by `specta 2.0.0-rc.24`
   which uses `fmt::from_fn`). CI enforces this via a dedicated job.
   A `flake.nix` is provided for Nix users — `nix develop` drops you
-  into a shell with Rust 1.93 + bun + `cargo-deny` pinned.
-- **Bun**: [oven-sh/bun](https://bun.sh) for the JavaScript side
-  (replaces npm/pnpm). Natively handles the monorepo's `workspace:*`
-  protocol and provides a `tsc` binary for the snapshot tests.
+  into a shell with Rust 1.93 + Node/npm + `cargo-deny` pinned.
+- **Node/npm**: npm workspaces drive the JavaScript side. TypeScript and
+  TS test execution come from local `typescript` / `tsx` devDependencies.
 
 ## First-time setup
 
@@ -16,8 +15,8 @@
 # Rust
 cargo build
 
-# JS packages (installs typescript, qs, and the workspace links)
-bun install
+# JS packages (installs typescript, tsx, qs, and workspace links)
+npm install
 ```
 
 ## Running the full check suite
@@ -29,7 +28,7 @@ cargo fmt --all --check
 # Lints (must pass with -D warnings)
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-# Tests — the snapshot test hard-fails if `bun install` wasn't run,
+# Tests — the snapshot test hard-fails if `npm install` wasn't run,
 # which is exactly what we want. Run it once and forget.
 cargo test --workspace --all-features
 
@@ -37,9 +36,10 @@ cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 # TypeScript
-bunx tsc --noEmit -p packages/client/tsconfig.json
-bunx tsc --noEmit -p packages/vite/tsconfig.json
-cd packages/client && bun test
+npm exec tsc --noEmit -p packages/client/tsconfig.json
+npm exec tsc --noEmit -p packages/vite/tsconfig.json
+npm run test -w @teleport-rs/client
+npm run test -w @teleport-rs/vite
 
 # Supply-chain & licenses
 cargo install cargo-deny --locked  # first time only
@@ -62,10 +62,10 @@ CI runs all of the above on every push and pull request. See
 - **Snapshot tests** (`crates/teleport-build/tests/snapshots.rs`) —
   both text snapshots via `insta` and a semantic `tsc --noEmit` step
   against the real `@teleport-rs/client` types (auto-read from
-  `packages/client/src/types.ts` on every run, with an `rpc.ts`
-  sentinel guarding the one hardcoded signature). `tsc` is a hard
+  `packages/client/src/types.ts` on every run, with a small hardcoded
+  `TeleportClient` stub for generated-client checks). `tsc` is a hard
   prerequisite — if it's missing the test panics with a
-  "run `bun install`" message.
+  "run `npm install`" message.
 - **TypeScript tests** (`packages/client/src/__tests__/`) — unit tests
   for the runtime helpers (result types, error handling).
 

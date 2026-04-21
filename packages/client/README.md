@@ -11,35 +11,38 @@ wrapper — no React, no Svelte, no bundler magic.
 ## Install
 
 ```bash
-bun add @teleport-rs/client         # or: npm install / pnpm add
+npm install @teleport-rs/client
 ```
 
 Usually installed alongside `@teleport-rs/vite` in dev:
 
 ```bash
-bun add -D @teleport-rs/vite
+npm install -D @teleport-rs/vite
 ```
 
 ## Usage
 
-Configure once at the entry point of your frontend:
+Create a client once at the entry point of your frontend:
 
 ```typescript
-import { configure } from "@teleport-rs/client";
+import { createClient } from "@teleport-rs/client";
+import { bindClient } from "./generated/client";
 
-configure({
+const client = createClient({
   baseUrl: "/api",
   credentials: "include", // send the session cookie
 });
+
+export const { users } = bindClient(client);
 ```
 
-Then import from your generated client module:
+Then use the bound generated client:
 
 ```typescript
-import { users } from "./generated/client";
 import { isAppError, isTransportError } from "@teleport-rs/client";
+import { users } from "./api";
 
-const result = await users.getUser("123");
+const result = await users.getUser({ id: "123" });
 
 if (isTransportError(result)) {
   console.error("network problem", result.transport);
@@ -57,7 +60,7 @@ use `rpcUnwrap`:
 import { rpcUnwrap, TeleportError } from "@teleport-rs/client";
 
 try {
-  const user = rpcUnwrap(await users.getUser("123"));
+  const user = rpcUnwrap(await users.getUser({ id: "123" }));
   return user;
 } catch (err) {
   if (err instanceof TeleportError && err.is("NotFound")) {
@@ -67,17 +70,24 @@ try {
 }
 ```
 
+`TeleportError.is(...)` only accepts known teleport app-error variants.
+If you need to compare against an arbitrary string, read `err.appError.type`
+directly instead of calling `.is(...)`.
+
 ## Exports
 
-- `createClient(config)` — low-level client factory used by generated code.
-- `configure(config)` / `getConfig()` — global configuration.
-- `rpc` — the call function used inside generated modules.
+- `createClient(config)` — instance client factory; preferred for app wiring.
 - `isAppError`, `isTransportError` — discriminated-union type guards.
 - `rpcUnwrap`, `mapError` — ergonomic helpers for throwing vs. branching.
 - `TeleportError`, `TransportFailure` — exception classes preserving the
   typed error payload.
 - Types: `AppError`, `TransportError`, `RpcResult`, `HttpMethod`,
   `TeleportClient`, `RpcConfig`.
+
+The client only classifies a non-OK response as a typed `AppError` when
+the JSON matches the teleport error envelope and the HTTP status matches
+the documented variant mapping. Malformed or mismatched error payloads
+fall back to `TransportError`.
 
 See [the main repo](https://github.com/refactor-goblin/teleport-rs) for
 a full walkthrough, the Rust side of the story, and the generated

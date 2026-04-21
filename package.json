@@ -1,9 +1,13 @@
 {
   "name": "teleport-rs-monorepo",
   "private": true,
+  "packageManager": "npm@11.9.0",
+  "scripts": {
+    "build:js": "npm run build -w @teleport-rs/client && npm run build -w @teleport-rs/vite",
+    "demo:export": "cargo run -p teleport-demo --bin server -- --export-only"
+  },
   "workspaces": [
-    "packages/client",
-    "packages/vite",
+    "packages/*",
     "examples/demo/frontend"
   ]
 }

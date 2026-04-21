@@ -236,8 +236,13 @@ Procedures that do not need typed details keep the default and use
 `AppError` (i.e. `AppError<()>`):
 
 ```rust,ignore
-async fn get_user(ctx: &AppState, id: String) -> Result<User, AppError> {
-    ctx.get_user(&id).cloned().ok_or(AppError::NotFound)
+#[teleport_type]
+pub struct GetUserInput {
+    pub id: String,
+}
+
+async fn get_user(ctx: &AppState, input: GetUserInput) -> Result<User, AppError> {
+    ctx.get_user(&input.id).cloned().ok_or(AppError::NotFound)
 }
 ```
 
@@ -248,8 +253,13 @@ whose `type` tag matches the Rust enum. The client package exports type
 guards and helpers in `packages/client/src/result.ts`:
 
 ```typescript
+import { createClient } from "@teleport-rs/client";
 import { isAppError, isTransportError, rpcUnwrap } from "@teleport-rs/client";
+import { bindClient } from "./generated/client";
 import type { LoginErrorDetail } from "./generated/types";
+
+const client = createClient({ baseUrl: "http://localhost:3000" });
+const { auth } = bindClient(client);
 
 const result = await auth.login({ email, password });
 
@@ -279,7 +289,11 @@ For contexts where throwing is acceptable (e.g. inside a SvelteKit
 remote function), use `rpcUnwrap`:
 
 ```typescript
-import { rpcUnwrap, TeleportError } from "@teleport-rs/client";
+import { createClient, rpcUnwrap, TeleportError } from "@teleport-rs/client";
+import { bindClient } from "./generated/client";
+
+const client = createClient({ baseUrl: "http://localhost:3000" });
+const { auth } = bindClient(client);
 
 try {
     const session = rpcUnwrap(await auth.login({ email, password }));
@@ -293,7 +307,9 @@ try {
 ```
 
 `TeleportError` carries the original `AppError<E>` so you can inspect
-`.detail` and `.is(variant)` without losing type safety.
+`.detail` and `.is(variant)` without losing type safety. `.is(...)`
+only accepts known teleport error variants; for arbitrary string
+comparisons, use `err.appError.type` directly.
 
 Transport errors (network failures, timeouts, non-JSON responses) are
 surfaced through `isTransportError` or via `TransportFailure` from

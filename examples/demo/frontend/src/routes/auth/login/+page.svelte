@@ -1,48 +1,27 @@
 <script lang="ts">
-	import { login } from '$lib/server/data.remote';
-	import { goto } from '$app/navigation';
+	import type { ActionData } from './$types';
 
-	let email = $state('');
-	let password = $state('');
-	let error = $state('');
-	let loading = $state(false);
-
-	async function handleSubmit(e: SubmitEvent) {
-		e.preventDefault();
-		error = '';
-		loading = true;
-
-		try {
-			await login({ email, password });
-			await goto('/profile');
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Login failed';
-		} finally {
-			loading = false;
-		}
-	}
+	let { form }: { form: ActionData } = $props();
 </script>
 
 <h1>Login</h1>
 
-{#if error}
-	<p class="error">{error}</p>
+{#if form?.error}
+	<p class="error">{form.error}</p>
 {/if}
 
-<form onsubmit={handleSubmit}>
+<form method="POST">
 	<label>
 		Email
-		<input type="email" bind:value={email} required />
+		<input type="email" name="email" value={form?.email ?? ''} required />
 	</label>
 
 	<label>
 		Password
-		<input type="password" bind:value={password} required />
+		<input type="password" name="password" required />
 	</label>
 
-	<button type="submit" disabled={loading}>
-		{loading ? 'Logging in...' : 'Log in'}
-	</button>
+	<button type="submit">Log in</button>
 </form>
 
 <style>

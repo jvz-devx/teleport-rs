@@ -1,5 +1,11 @@
 import type { AppError, TransportError } from "./types";
 
+type TeleportErrorMatch<E, K extends AppError<E>["type"]> =
+  TeleportError<E> & {
+    appError: Extract<AppError<E>, { type: K }>;
+    detail: K extends "Detail" ? E : undefined;
+  };
+
 /**
  * Error thrown by rpcUnwrap() when the RPC call fails with an application error.
  * Carries the original typed error for downstream inspection.
@@ -14,7 +20,7 @@ export class TeleportError<E = never> extends Error {
   }
 
   /** Check if this is a specific error variant. */
-  is(type: string): boolean {
+  is<K extends AppError<E>["type"]>(type: K): this is TeleportErrorMatch<E, K> {
     return this.appError.type === type;
   }
 

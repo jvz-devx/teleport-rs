@@ -10,27 +10,21 @@
 //! *semantic* TypeScript regressions (syntax errors, bad identifiers,
 //! missing fields, wrong generics) fail here as well. `tsc` is a hard
 //! prerequisite — if it isn't found, the test panics with a clear
-//! "run `bun install`" message. Run `bun install` once from the repo
+//! "run `npm install`" message. Run `npm install` once from the repo
 //! root (or enter the `nix develop` shell) and it Just Works.
 //!
 //! # Stub drift mitigation
 //!
-//! The `@teleport-rs/client` stub fed to tsc is **not** hand-maintained.
-//! It is rebuilt from the real client source on every test run:
+//! The `@teleport-rs/client` stub fed to tsc is only partially
+//! hand-maintained:
 //!
 //! - The type portion is read verbatim from
 //!   `packages/client/src/types.ts`, so any rename, field addition, or
 //!   discriminator change in the real client flows through automatically
 //!   and will fail the snapshot's tsc step if the codegen is out of sync.
-//! - The `rpc` function signature is hardcoded in `build_client_stub_dts`
-//!   because `rpc.ts` has a body and can't be inlined into a `.d.ts`.
-//!   It is guarded by `assert_real_rpc_matches_sentinel`, which reads
-//!   `packages/client/src/rpc.ts` and fails loudly if the signature
-//!   shape changes.
-//!
-//! If the sentinel fails, update the hardcoded declaration in
-//! `build_client_stub_dts` *and* the `RPC_SIGNATURE_SENTINEL` constant
-//! in the same PR.
+//! - The `TeleportClient` interface is hardcoded in `build_client_stub_dts`
+//!   because `client.ts` has a runtime implementation body and can't be
+//!   inlined into a `.d.ts`.
 //!
 //! # How it works
 //!
@@ -182,26 +176,14 @@ fn generate_into_tempdir() -> (tempfile::TempDir, Vec<(String, String)>) {
 // tsc --noEmit validation
 // ---------------------------------------------------------------------------
 
-/// Sentinel substring that must appear in `packages/client/src/rpc.ts`.
-///
-/// The `rpc` declaration in [`build_client_stub_dts`] is hardcoded — it
-/// cannot be auto-read from `rpc.ts` because the real file has a function
-/// body, which is invalid in a `.d.ts` context. To prevent silent drift
-/// between the hardcoded stub signature and the real signature, every
-/// test run asserts that `rpc.ts` still contains this exact substring.
-///
-/// If this sentinel disappears, the `rpc` signature has been refactored
-/// — update both this constant and the hardcoded declaration in
-/// `build_client_stub_dts` in the same commit.
-const RPC_SIGNATURE_SENTINEL: &str = "export async function rpc<T, E>(";
-
 /// Build the `.d.ts` stub that stands in for `@teleport-rs/client` when
 /// type-checking the generated TS.
 ///
 /// The type declarations are read verbatim from
-/// `packages/client/src/types.ts` so they cannot drift. The `rpc`
-/// function signature is hardcoded and guarded by
-/// [`assert_real_rpc_matches_sentinel`].
+/// `packages/client/src/types.ts` so they cannot drift. The
+/// `TeleportClient` interface is hardcoded here because `client.ts`
+/// contains runtime implementation details that cannot be inlined into
+/// a `.d.ts`.
 fn build_client_stub_dts(repo_root: &std::path::Path) -> String {
     let types_ts = std::fs::read_to_string(repo_root.join("packages/client/src/types.ts"))
         .expect("read packages/client/src/types.ts");
@@ -211,38 +193,16 @@ fn build_client_stub_dts(repo_root: &std::path::Path) -> String {
     stub.push_str(
         "// Drift from the real types.ts is impossible — this file is read fresh on every run.\n",
     );
-    stub.push_str(
-        "// The `rpc` signature below is guarded by assert_real_rpc_matches_sentinel().\n\n",
-    );
+    stub.push('\n');
     stub.push_str(&types_ts);
     stub.push_str(
-        "\n// --- rpc function (hardcoded; sentinel-guarded) ---\n\
-         export declare function rpc<T, E>(\n  \
-           method: HttpMethod,\n  \
-           path: string,\n  \
-           input: unknown,\n\
-         ): Promise<RpcResult<T, E>>;\n",
+        "\n// --- TeleportClient interface (hardcoded) ---\n\
+         export interface TeleportClient {\n  \
+           rpc<T, E>(method: HttpMethod, path: string, input: unknown): Promise<RpcResult<T, E>>;\n  \
+           readonly config: Readonly<unknown>;\n\
+         }\n",
     );
     stub
-}
-
-/// Guard against drift in the hardcoded `rpc` portion of the stub.
-///
-/// If `rpc.ts` no longer contains the expected signature shape, the
-/// hardcoded declaration in [`build_client_stub_dts`] is stale — update
-/// both the stub and [`RPC_SIGNATURE_SENTINEL`] together.
-fn assert_real_rpc_matches_sentinel(repo_root: &std::path::Path) {
-    let rpc_ts = std::fs::read_to_string(repo_root.join("packages/client/src/rpc.ts"))
-        .expect("read packages/client/src/rpc.ts");
-
-    assert!(
-        rpc_ts.contains(RPC_SIGNATURE_SENTINEL),
-        "teleport-build snapshot test sentinel failed: \
-         `packages/client/src/rpc.ts` no longer contains the string {RPC_SIGNATURE_SENTINEL:?}. \
-         The `rpc` function signature has changed. Update the hardcoded \
-         declaration in `build_client_stub_dts()` in this test file to match, \
-         and update `RPC_SIGNATURE_SENTINEL` to the new shape.",
-    );
 }
 
 /// Compute the absolute path of the repo root from this crate's
@@ -284,16 +244,11 @@ const TSCONFIG_JSON: &str = r#"{
 /// Type-check every generated file in `out_dir` against the auto-built
 /// `@teleport-rs/client` stub. Panics (failing the test) on:
 ///
-/// - A drift in `rpc.ts` that defeats the sentinel.
-/// - `tsc` not being installed (install `bun install` from the repo
+/// - `tsc` not being installed (install `npm install` from the repo
 ///   root, or enter `nix develop`).
 /// - Any type error reported by `tsc --noEmit`.
 fn type_check_with_tsc(out_dir: &std::path::Path) {
-    // Fail fast if the hardcoded `rpc` declaration in `build_client_stub_dts`
-    // has drifted from the real `packages/client/src/rpc.ts`. This keeps
-    // the single remaining piece of hand-synchronised stub honest.
     let root = repo_root();
-    assert_real_rpc_matches_sentinel(&root);
 
     let stub = build_client_stub_dts(&root);
     std::fs::write(out_dir.join("teleport_rs_client_stub.d.ts"), stub).expect("write stub .d.ts");
@@ -309,9 +264,9 @@ fn type_check_with_tsc(out_dir: &std::path::Path) {
                This test type-checks the generated TypeScript against the real\n  \
                `@teleport-rs/client` types. To fix, run from the repo root:\n\
              \n      \
-                 bun install\n\
+                 npm install\n\
              \n  \
-               (or enter the dev shell with `nix develop`, which provides bun).\n"
+               (or enter the dev shell with `nix develop`, which provides node).\n"
         );
     });
 
@@ -396,6 +351,6 @@ fn snapshot_generated_typescript() {
     // This catches regressions the text snapshot can't — syntax errors,
     // broken generics, missing fields, wrong import paths. `tsc` is a
     // hard prerequisite; if it's missing the test panics with a clear
-    // "run bun install" message. See `type_check_with_tsc`.
+    // "run npm install" message. See `type_check_with_tsc`.
     type_check_with_tsc(tmp.path());
 }
