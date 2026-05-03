@@ -13,7 +13,7 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getUser(id: string): Promise<User> {
-	return mapError(await api.users.getUser(id), (error) => {
+	return mapError(await api.users.getUser({ id }), (error) => {
 		if (error.type === 'Detail' && error.detail.user_not_found) {
 			throw new Error('User not found');
 		}

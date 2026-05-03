@@ -52,7 +52,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use teleport_build::{Config, export_from_inventory};
-use teleport_core::{HttpMethod, ProcedureRegistration, ProcedureType};
+use teleport_core::{AuthMode, HttpMethod, ProcedureRegistration, ProcedureType};
 
 // ---------------------------------------------------------------------------
 // Fixture types
@@ -108,6 +108,7 @@ inventory::submit! {
         output_type: |types| <SnapshotUser as specta::Type>::definition(types),
         error_type: |types| <() as specta::Type>::definition(types),
         doc: "Look up a user by their ID.",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -124,6 +125,7 @@ inventory::submit! {
         output_type: |types| <SnapshotUser as specta::Type>::definition(types),
         error_type: |types| <SnapshotCreateUserError as specta::Type>::definition(types),
         doc: "Create a new user account.",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -140,6 +142,7 @@ inventory::submit! {
         output_type: |types| <() as specta::Type>::definition(types),
         error_type: |types| <() as specta::Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -197,6 +200,8 @@ fn build_client_stub_dts(repo_root: &std::path::Path) -> String {
     stub.push_str(&types_ts);
     stub.push_str(
         "\n// --- TeleportClient interface (hardcoded) ---\n\
+         export declare function rpc<T, E>(method: HttpMethod, path: string, input: unknown): Promise<RpcResult<T, E>>;\n\
+\
          export interface TeleportClient {\n  \
            rpc<T, E>(method: HttpMethod, path: string, input: unknown): Promise<RpcResult<T, E>>;\n  \
            readonly config: Readonly<unknown>;\n\

@@ -1,6 +1,10 @@
 # Getting Started
 
-This guide walks you through building a simple API with teleport-rs.
+This guide walks you through building a simple Rust API with teleport-rs.
+Rust is the reference authoring experience. The repo also ships `.NET`
+and Go implementations that export the same `teleport.contract/v1`
+shape; see [`../dotnet/README.md`](../dotnet/README.md) and
+[`../go/README.md`](../go/README.md) for those host stacks.
 
 ## 1. Create a new Rust project
 
@@ -13,7 +17,7 @@ Add dependencies to `Cargo.toml`:
 
 ```toml
 [dependencies]
-teleport = { version = "0.1", features = ["export"] }
+teleport = { version = "1.0", features = ["export"] }
 axum = "0.8"
 http = "1"
 tokio = { version = "1", features = ["full"] }
@@ -71,14 +75,16 @@ has a hard bound:
 S: Clone + Send + Sync + 'static
 ```
 
-The router clones `S` on every request before handing it to your
-procedure, so the state struct itself must be **cheap to clone**. The
-naive first attempt — wrapping the whole state in `Arc<Mutex<_>>` — does
-not work, because procedures take `ctx: &AppState`, not
-`ctx: &Arc<Mutex<AppState>>`, and the clone-on-every-request path would
-serialize every handler behind a single mutex.
+The router stores your state behind `Arc<S>` and passes `&S` to each
+procedure. That means the top-level state is shared across requests, and
+the mutable parts inside it need their own synchronization.
 
-> **Wrap mutable fields in `Arc<Mutex<_>>` _inside_ the struct, not around the struct. `TeleportRouter` clones `S` on every request, so the whole struct must be cheap to clone.**
+The naive first attempt — wrapping the whole state in
+`Arc<Mutex<AppState>>` — does not work, because procedures take
+`ctx: &AppState`, not `ctx: &Arc<Mutex<AppState>>`, and it would also put
+every handler behind one global mutex.
+
+> **Wrap mutable fields in `Arc<Mutex<_>>` _inside_ the struct, not around the struct. `TeleportRouter` clones the outer `Arc<S>` handle, so your state can stay shared while individual mutable fields choose their own locks.**
 
 A working `AppState` with mutable data looks like this:
 
@@ -131,9 +137,7 @@ impl AppState {
 }
 ```
 
-`#[derive(Clone)]` works because every field is cheaply cloneable: `Vec`
-is a plain clone, and `Arc<Mutex<_>>` clones just bump a refcount. The
-`HashMap<String, AuthedUser>` is fine if it's only mutated at startup;
+The `HashMap<String, AuthedUser>` is fine if it's only mutated at startup;
 if you need to mutate it at runtime, wrap it the same way:
 `Arc<Mutex<HashMap<String, AuthedUser>>>`.
 
@@ -521,6 +525,44 @@ cargo watch -x run
 ```
 
 The Vite plugin picks up changes to the generated files and triggers HMR in your frontend.
+
+## Cross-language workflow
+
+All implementations feed the same TypeScript generator through
+`teleport.contract.json`.
+
+Rust:
+
+```bash
+npm run demo:export
+```
+
+`.NET`:
+
+```bash
+npm run dotnet:build
+npm run dotnet:test
+npm run demo:export:dotnet
+```
+
+Go:
+
+```bash
+npm run go:build
+npm run go:test
+npm run demo:export:go
+```
+
+Parity:
+
+```bash
+npm run contracts:parity
+```
+
+The generated frontend API should remain stable across all three
+backends. If you add a contract feature, update the Rust path first,
+then add matching exporter/runtime behavior and demo contract coverage
+for `.NET` and Go.
 
 ## Next steps
 

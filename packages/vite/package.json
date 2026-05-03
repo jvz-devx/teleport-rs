@@ -1,6 +1,13 @@
 {
   "name": "@teleport-rs/vite",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jvz-devx/teleport-rs.git",
+    "directory": "packages/vite"
+  },
+  "homepage": "https://github.com/jvz-devx/teleport-rs#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +18,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/__tests__"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

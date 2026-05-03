@@ -12,13 +12,20 @@ mod types;
 #[tokio::main]
 async fn main() {
     let export_only = std::env::args().any(|arg| arg == "--export-only");
-    let export_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("frontend/src/lib/api/generated");
+    let contract_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("teleport.contract.json");
+    let export_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("frontend/src/lib/api/generated");
 
     TeleportRouter::<state::AppState>::export(&ExportConfig::new(&export_dir))
         .expect("failed to export TS bindings");
 
     if export_only {
+        TeleportRouter::<state::AppState>::export_contract(
+            &contract_path,
+            &ExportConfig::new(&export_dir),
+        )
+        .expect("failed to export contract");
+        println!("Exported contract to {}", contract_path.display());
         println!("Exported TypeScript bindings to {}", export_dir.display());
         return;
     }

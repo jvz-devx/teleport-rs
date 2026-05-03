@@ -1,6 +1,6 @@
 [package]
 name = "teleport-core"
-version = "0.1.0"
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -13,3 +13,4 @@ readme = "../../README.md"
 [dependencies]
 specta = { workspace = true }
 inventory = { workspace = true }
+teleport-contract = { workspace = true }

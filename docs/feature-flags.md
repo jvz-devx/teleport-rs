@@ -21,7 +21,7 @@ the default value of the `.manifest()` builder method.
 
 ```toml
 [dependencies]
-teleport = { version = "0.1", features = ["export", "debug-manifest"] }
+teleport = { version = "1.0", features = ["export", "debug-manifest"] }
 ```
 
 This gives you `TeleportRouter::export(...)` for writing TypeScript
@@ -32,7 +32,7 @@ development.
 
 ```toml
 [dependencies]
-teleport = { version = "0.1", default-features = false }
+teleport = { version = "1.0", default-features = false }
 ```
 
 No TypeScript exporter compiled in, no manifest endpoint. The resulting

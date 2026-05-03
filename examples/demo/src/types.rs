@@ -45,3 +45,8 @@ pub struct LoginErrorDetail {
 pub struct GetUserErrorDetail {
     pub user_not_found: bool,
 }
+
+#[teleport_type]
+pub struct GetUserById {
+    pub id: String,
+}

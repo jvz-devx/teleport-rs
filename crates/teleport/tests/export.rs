@@ -134,11 +134,11 @@ fn full_pipeline_generates_ts_files() {
         "client.ts missing listUsers:\n{client_ts}"
     );
     assert!(
-        client_ts.contains("client.rpc(\"GET\""),
+        client_ts.contains("client.rpc<") && client_ts.contains("(\"GET\""),
         "client.ts missing GET client.rpc call:\n{client_ts}"
     );
     assert!(
-        client_ts.contains("client.rpc(\"POST\""),
+        client_ts.contains("client.rpc<") && client_ts.contains("(\"POST\""),
         "client.ts missing POST client.rpc call:\n{client_ts}"
     );
     assert!(
@@ -188,7 +188,10 @@ fn generated_client_has_correct_methods() {
     );
 
     // listUsers has no input → passes undefined
-    assert!(client_ts.contains("undefined"), "client.ts should pass undefined for no-input procedures");
+    assert!(
+        client_ts.contains("undefined"),
+        "client.ts should pass undefined for no-input procedures"
+    );
 
     // Should import from @teleport-rs/client
     assert!(
@@ -220,6 +223,41 @@ fn generated_errors_has_procedure_specific_aliases() {
         errors_ts.contains("GetUserError"),
         "errors.ts should contain GetUserError alias:\n{errors_ts}"
     );
+}
+
+#[cfg(feature = "export")]
+#[test]
+fn contract_bundle_is_exported_and_can_be_written() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let config = test_config(tmp.path().to_path_buf());
+
+    let bundle =
+        TeleportRouter::<TestState>::contract(&config).expect("contract generation should succeed");
+    assert_eq!(bundle.version, "teleport.contract/v1");
+    assert!(
+        bundle
+            .procedures
+            .iter()
+            .any(|proc| proc.name == "export.getUser"),
+        "contract should include export.getUser"
+    );
+    assert!(
+        bundle
+            .types
+            .iter()
+            .any(|named| named.name == "GetUserError"),
+        "contract should include named error type"
+    );
+
+    let contract_path = tmp.path().join("teleport.contract.json");
+    TeleportRouter::<TestState>::export_contract(&contract_path, &config)
+        .expect("contract file should be written");
+
+    let written = std::fs::read_to_string(&contract_path).expect("contract json should exist");
+    let parsed: teleport::ContractBundle =
+        serde_json::from_str(&written).expect("contract json should parse");
+    assert_eq!(parsed.version, bundle.version);
+    assert_eq!(parsed.procedures.len(), bundle.procedures.len());
 }
 
 #[test]

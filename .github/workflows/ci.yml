@@ -69,6 +69,8 @@ jobs:
         # The teleport-build snapshot test requires `tsc` and hard-fails
         # if it's missing. `npm ci` above guarantees it's present.
         run: cargo test --workspace --all-features
+      - name: cargo package publishable crates
+        run: ./scripts/package-publishable-crates.sh
 
   docs:
     name: rustdoc
@@ -121,6 +123,8 @@ jobs:
         run: npm run test -w @teleport-rs/client
       - name: Run @teleport-rs/vite unit tests
         run: npm run test -w @teleport-rs/vite
+      - name: Pack JS packages
+        run: npm pack -w @teleport-rs/client --dry-run && npm pack -w @teleport-rs/vite --dry-run
 
   demo_frontend:
     name: demo frontend
@@ -146,6 +150,144 @@ jobs:
         run: npm run check -w examples/demo/frontend
       - name: Build demo frontend
         run: npm run build -w examples/demo/frontend
+
+  dotnet:
+    name: dotnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: dotnet restore
+        run: dotnet restore dotnet/Teleport.Net.sln
+      - name: dotnet build
+        run: dotnet build dotnet/Teleport.Net.sln -c Release --no-restore
+      - name: dotnet test
+        run: dotnet test dotnet/Teleport.Net.sln -c Release --no-build
+      - name: dotnet pack Teleport.Net
+        run: dotnet pack dotnet/src/Teleport.Net/Teleport.Net.csproj -c Release --no-build --output /tmp/teleport-nuget
+      - name: dotnet pack Teleport.Net.AspNetCore
+        run: dotnet pack dotnet/src/Teleport.Net.AspNetCore/Teleport.Net.AspNetCore.csproj -c Release --no-build --output /tmp/teleport-nuget
+
+  demo_frontend_dotnet:
+    name: demo frontend (.NET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install JS dependencies
+        run: npm ci
+      - name: Build local JS packages
+        run: npm run build:js
+      - name: Build .NET solution
+        run: dotnet build dotnet/Teleport.Net.sln -c Release
+      - name: Export demo frontend bindings from .NET
+        run: npm run demo:export:dotnet
+      - name: Check demo frontend
+        run: npm run check -w examples/demo/frontend
+      - name: Build demo frontend
+        run: npm run build -w examples/demo/frontend
+
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: Swatinem/rust-cache@v2
+      - name: go test
+        run: cd go && CGO_ENABLED=0 go test ./...
+      - name: go vet
+        run: cd go && CGO_ENABLED=0 go vet ./...
+      - name: Export Go demo contract
+        run: cd go && CGO_ENABLED=0 go run ./examples/demo --export-only
+      - name: Validate Go contract via shared TS generator
+        run: cargo run -p teleport-cli -- generate-ts --input go/examples/demo/teleport.contract.json --output /tmp/teleport-go-bindings
+
+  demo_frontend_go:
+    name: demo frontend (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install JS dependencies
+        run: npm ci
+      - name: Build local JS packages
+        run: npm run build:js
+      - name: Build Go implementation
+        run: npm run go:build
+      - name: Export demo frontend bindings from Go
+        run: npm run demo:export:go
+      - name: Check demo frontend
+        run: npm run check -w examples/demo/frontend
+      - name: Build demo frontend
+        run: npm run build -w examples/demo/frontend
+
+  contract_parity:
+    name: contract parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install JS dependencies
+        run: npm ci
+      - name: Export Rust demo contract
+        run: npm run demo:export
+      - name: Export .NET demo contract
+        run: npm run demo:export:dotnet
+      - name: Export Go demo contract
+        run: cd go && CGO_ENABLED=0 go run ./examples/demo --export-only
+      - name: Compare contracts
+        run: npm run contracts:parity
 
   deny:
     name: cargo-deny
@@ -174,6 +316,11 @@ jobs:
       - msrv
       - typescript
       - demo_frontend
+      - dotnet
+      - go
+      - demo_frontend_dotnet
+      - demo_frontend_go
+      - contract_parity
       - deny
     steps:
       - name: Check all jobs succeeded

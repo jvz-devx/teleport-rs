@@ -1,26 +1,16 @@
-// Error type generation for TypeScript.
-//
-// Generates `errors.ts` with procedure-specific error type aliases.
-// Base types (`AppError`, `TransportError`, `RpcResult`) are imported
-// from the client runtime package.
-
 use std::fmt::Write as _;
 
-use specta::ResolvedTypes;
+use teleport_contract::ContractBundle;
 
 use crate::GENERATED_HEADER;
+use crate::GenerateError;
 use crate::config::Config;
-use crate::{GenerateError, ProcedureInfo};
 
 /// Generate the contents of `errors.ts`.
-///
-/// Imports `AppError` from the client runtime package and generates
-/// procedure-specific error type aliases for any procedure whose
-/// error detail type is not `never`.
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn generate_errors(
-    procedures: &[ProcedureInfo],
+    bundle: &ContractBundle,
     config: &Config,
-    resolved_types: &ResolvedTypes,
 ) -> Result<String, GenerateError> {
     let client_path = config
         .client_import_path
@@ -31,34 +21,28 @@ pub(crate) fn generate_errors(
     out.push_str(GENERATED_HEADER);
     out.push('\n');
 
-    // Collect procedure-specific error aliases.
-    let ts_exporter = specta_typescript::Typescript::default();
     let mut aliases = Vec::new();
     let mut type_imports = Vec::new();
 
-    for proc in procedures {
-        let error_ts =
-            crate::ts_utils::datatype_to_ts(&ts_exporter, resolved_types, &proc.error_type)?;
+    for proc in &bundle.procedures {
+        let error_ts = if matches!(&proc.error_type, teleport_contract::TypeExpr::Tuple(elements) if elements.is_empty())
+        {
+            "never".to_owned()
+        } else {
+            crate::ts_utils::type_expr_to_ts(&proc.error_type)
+        };
 
         if error_ts == "never" {
             continue;
         }
 
-        // Derive a PascalCase alias name from the procedure name.
-        // "users.getUser" -> "GetUserError"
-        let (_ns, method) = crate::naming::split_namespace(&proc.name);
-        let alias_name = format!("{}Error", crate::naming::snake_to_pascal(method));
-
+        let alias_name = format!("{}Error", crate::naming::snake_to_pascal(&proc.method_name));
         aliases.push((alias_name, error_ts.clone()));
-
-        // Track the error detail type name for the import list (only if it's
-        // a named type reference, not an inline primitive).
         if !crate::ts_utils::is_ts_primitive(&error_ts) {
             type_imports.push(error_ts);
         }
     }
 
-    // Emit imports.
     if !aliases.is_empty() {
         out.push('\n');
         let _ = writeln!(out, "import type {{ AppError }} from \"{client_path}\";");
@@ -74,7 +58,6 @@ pub(crate) fn generate_errors(
         );
     }
 
-    // Emit procedure-specific error aliases.
     if !aliases.is_empty() {
         out.push('\n');
         out.push_str("// Procedure-specific error aliases\n");
@@ -84,119 +67,4 @@ pub(crate) fn generate_errors(
     }
 
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    // Test-only: `.expect()` is informative and any panic is caught by the test runner.
-    #![allow(clippy::expect_used)]
-
-    use super::*;
-    use crate::config::{Config, NamespaceStyle, Naming};
-    use specta::{Type, Types};
-    use std::path::PathBuf;
-
-    #[derive(Debug, Clone, specta::Type)]
-    #[allow(dead_code)]
-    struct LoginErrorDetail {
-        invalid_credentials: bool,
-        account_locked: bool,
-    }
-
-    /// Helper to get the `DataType` for the TS `never` type.
-    fn never_datatype() -> specta::datatype::DataType {
-        <specta_typescript::Never as Type>::definition(&mut Types::default())
-    }
-
-    fn test_config() -> Config {
-        Config {
-            output_dir: PathBuf::from("/tmp/test"),
-            namespace_style: NamespaceStyle::ModulePath,
-            naming: Naming::default(),
-
-            route_prefix: "/rpc".to_owned(),
-            client_import_path: None,
-        }
-    }
-
-    #[test]
-    fn no_base_types_in_output() {
-        let types = Types::default();
-        let resolved = ResolvedTypes::from_resolved_types(types);
-        let config = test_config();
-        let output = generate_errors(&[], &config, &resolved).expect("should generate");
-
-        assert!(
-            !output.contains("export type AppError"),
-            "base AppError should not be defined"
-        );
-        assert!(
-            !output.contains("export type TransportError"),
-            "TransportError should not be defined"
-        );
-        assert!(
-            !output.contains("export type RpcResult"),
-            "RpcResult should not be defined"
-        );
-    }
-
-    #[test]
-    fn generates_error_alias_for_procedure() {
-        let mut types = Types::default();
-        let error_dt = <LoginErrorDetail as Type>::definition(&mut types);
-        let resolved = ResolvedTypes::from_resolved_types(types);
-        let config = test_config();
-
-        let proc = ProcedureInfo {
-            name: "auth.login".to_owned(),
-            method: crate::HttpMethod::Post,
-            path: "/rpc/auth.login".to_owned(),
-            doc: String::new(),
-            input_type: specta::datatype::DataType::Primitive(specta::datatype::Primitive::str),
-            output_type: specta::datatype::DataType::Primitive(specta::datatype::Primitive::str),
-            error_type: error_dt,
-        };
-
-        let output = generate_errors(&[proc], &config, &resolved).expect("should generate");
-        assert!(
-            output.contains("LoginError"),
-            "missing LoginError alias in:\n{output}"
-        );
-        assert!(
-            output.contains("AppError<LoginErrorDetail>"),
-            "missing AppError<LoginErrorDetail> in:\n{output}"
-        );
-        assert!(
-            output.contains("import type { AppError } from \"@teleport-rs/client\""),
-            "missing AppError import in:\n{output}"
-        );
-        assert!(
-            output.contains("import type { LoginErrorDetail } from \"./types\""),
-            "missing type import in:\n{output}"
-        );
-    }
-
-    #[test]
-    fn skips_never_error_types() {
-        let types = Types::default();
-        let resolved = ResolvedTypes::from_resolved_types(types);
-        let config = test_config();
-
-        let proc = ProcedureInfo {
-            name: "health.check".to_owned(),
-            method: crate::HttpMethod::Get,
-            path: "/rpc/health.check".to_owned(),
-            doc: String::new(),
-            input_type: specta::datatype::DataType::Tuple(specta::datatype::Tuple::new(vec![])),
-            output_type: specta::datatype::DataType::Tuple(specta::datatype::Tuple::new(vec![])),
-            error_type: never_datatype(),
-        };
-
-        let output = generate_errors(&[proc], &config, &resolved).expect("should generate");
-        assert!(!output.contains("CheckError"));
-        assert!(
-            !output.contains("import type { AppError }"),
-            "no AppError import when no aliases"
-        );
-    }
 }

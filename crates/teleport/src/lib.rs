@@ -5,10 +5,10 @@
 //! then build an Axum router with [`TeleportRouter`]. The same binary can
 //! emit a fully typed TypeScript client via the `export` feature.
 //!
-//! See the [README](https://github.com/refactor-goblin/teleport-rs) and the
-//! [getting started guide](https://github.com/refactor-goblin/teleport-rs/blob/master/docs/getting-started.md)
+//! See the [README](https://github.com/jvz-devx/teleport-rs) and the
+//! [getting started guide](https://github.com/jvz-devx/teleport-rs/blob/main/docs/getting-started.md)
 //! for a walkthrough. For the production checklist, see
-//! [`docs/security.md`](https://github.com/refactor-goblin/teleport-rs/blob/master/docs/security.md).
+//! [`docs/security.md`](https://github.com/jvz-devx/teleport-rs/blob/main/docs/security.md).
 
 /// Auth middleware configuration and helpers.
 pub mod auth;
@@ -36,3 +36,5 @@ pub use teleport_macros::{remote, teleport_type};
 
 #[cfg(feature = "export")]
 pub use teleport_build::Config as ExportConfig;
+#[cfg(feature = "export")]
+pub use teleport_build::ContractBundle;

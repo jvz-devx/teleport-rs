@@ -411,6 +411,28 @@ impl<S, St> TeleportRouter<S, St> {
     pub fn export(config: &teleport_build::Config) -> Result<(), teleport_build::GenerateError> {
         teleport_build::export_from_inventory(config)
     }
+
+    /// Build the language-neutral contract bundle from all registered procedures.
+    pub fn contract(
+        config: &teleport_build::Config,
+    ) -> Result<teleport_build::ContractBundle, teleport_build::GenerateError> {
+        teleport_build::contract_from_inventory(config)
+    }
+
+    /// Write the language-neutral contract bundle to a JSON file.
+    pub fn export_contract(
+        path: impl AsRef<std::path::Path>,
+        config: &teleport_build::Config,
+    ) -> Result<(), teleport_build::GenerateError> {
+        let bundle = teleport_build::contract_from_inventory(config)?;
+        let json = serde_json::to_string_pretty(&bundle)
+            .map_err(teleport_build::GenerateError::SerializeContract)?;
+        let path = path.as_ref();
+        std::fs::write(path, json).map_err(|source| teleport_build::GenerateError::WriteFile {
+            path: path.to_path_buf(),
+            source,
+        })
+    }
 }
 
 #[cfg(feature = "export")]

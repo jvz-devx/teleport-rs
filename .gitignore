@@ -1,13 +1,14 @@
-# Rust
-target/
-
-# Node
 node_modules/
-dist/
-.svelte-kit/
-
-# Generated bindings
-**/generated/
-
-# OS
-.DS_Store
+target/
+coverage/
+.codex
+packages/*/dist/
+packages/*/node_modules/
+examples/demo/frontend/node_modules/
+examples/demo/frontend/.svelte-kit/
+examples/demo/frontend/build/
+examples/demo/teleport.contract.json
+dotnet/**/bin/
+dotnet/**/obj/
+dotnet/examples/Teleport.Net.Demo/teleport.contract.json
+go/examples/demo/teleport.contract.json

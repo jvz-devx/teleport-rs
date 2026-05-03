@@ -2,6 +2,8 @@
 members = [
     "crates/teleport",
     "crates/teleport-core",
+    "crates/teleport-contract",
+    "crates/teleport-cli",
     "crates/teleport-macros",
     "crates/teleport-build",
     "examples/demo",
@@ -26,6 +28,7 @@ serde_json = "1"
 serde_qs = "0.13"
 specta = { version = "=2.0.0-rc.24", features = ["derive"] }
 specta-typescript = "=0.0.11"
+teleport-contract = { version = "1.0.0", path = "crates/teleport-contract" }
 tokio = { version = "1", features = ["full"] }
 http = "1"
 inventory = "0.3"

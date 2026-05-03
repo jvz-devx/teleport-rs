@@ -1,11 +1,11 @@
 # @teleport-rs/client
 
-TypeScript runtime for [teleport-rs](https://github.com/refactor-goblin/teleport-rs),
-a Rust-to-TypeScript RPC framework.
+TypeScript runtime for [teleport-rs](https://github.com/jvz-devx/teleport-rs),
+a native-backend-to-TypeScript RPC framework.
 
 This package is the small, framework-agnostic HTTP client consumed by
-the code that `teleport-rs` generates from your Rust `#[remote]`
-procedures. It ships type guards, error classes, and a thin `fetch`
+the code that Teleport generates from a shared backend contract. It
+ships type guards, error classes, and a thin `fetch`
 wrapper — no React, no Svelte, no bundler magic.
 
 ## Install
@@ -89,6 +89,5 @@ the JSON matches the teleport error envelope and the HTTP status matches
 the documented variant mapping. Malformed or mismatched error payloads
 fall back to `TransportError`.
 
-See [the main repo](https://github.com/refactor-goblin/teleport-rs) for
-a full walkthrough, the Rust side of the story, and the generated
-types your project will consume.
+See [the main repo](https://github.com/jvz-devx/teleport-rs) for
+a full walkthrough and the generated types your project will consume.

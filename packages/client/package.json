@@ -1,6 +1,13 @@
 {
   "name": "@teleport-rs/client",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jvz-devx/teleport-rs.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/jvz-devx/teleport-rs#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +17,10 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "!dist/__tests__"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "tsx --test src/__tests__/*.test.ts",

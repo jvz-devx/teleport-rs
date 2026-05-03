@@ -21,3 +21,23 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: "/dotnet"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dotnet:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: "/go"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      go:
+        patterns: ["*"]

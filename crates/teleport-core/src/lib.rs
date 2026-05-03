@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use specta::datatype::DataType;
+pub use teleport_contract::AuthMode;
 
 /// HTTP method for a remote procedure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +82,8 @@ pub struct ProcedureRegistration {
     pub error_type: fn(&mut specta::Types) -> DataType,
     /// Doc comment from the Rust source.
     pub doc: &'static str,
+    /// Whether the procedure requires authentication.
+    pub auth_mode: AuthMode,
     /// Type-erased function that mounts this procedure's route.
     pub mount_fn: ErasedMountFn,
 }

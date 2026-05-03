@@ -6,13 +6,14 @@
 crates/
 ├── teleport/          # Main library — re-exports everything users need
 │                      # (TeleportRouter, #[remote], #[teleport_type], AppError, AuthedUser)
-├── teleport-core/     # Shared types between teleport and teleport-build
-│                      # (ProcedureInfo, HttpMethod, ProcedureKind)
+├── teleport-core/     # Rust-only runtime registration metadata
+│                      # (ProcedureRegistration, HttpMethod, ProcedureType)
+├── teleport-contract/ # Language-neutral contract bundle for codegen/conformance
 ├── teleport-macros/   # Proc macro crate — #[remote] and #[teleport_type]
-└── teleport-build/    # TypeScript code generation (types.ts, client.ts, errors.ts)
+└── teleport-build/    # TypeScript code generation from ContractBundle
 ```
 
-**Why the split?** Proc macro crates can only export procedural macros. `teleport-macros` handles the `#[remote]` attribute, which registers procedures via `inventory::submit!`. `teleport-core` exists to share type definitions between `teleport` (runtime) and `teleport-build` (codegen) without circular dependencies. `teleport` re-exports everything so users only need `use teleport::*`.
+**Why the split?** Proc macro crates can only export procedural macros. `teleport-macros` handles the `#[remote]` attribute, which registers procedures via `inventory::submit!`. `teleport-core` stays Rust-specific and only carries the runtime metadata needed to mount handlers. `teleport-contract` is the portable boundary: a versioned bundle of procedure descriptors and type definitions. `teleport-build` now consumes that contract instead of reaching directly into Rust discovery. `teleport` still re-exports everything users need for the Rust happy path.
 
 ## npm Packages
 
@@ -22,13 +23,40 @@ packages/
 └── vite/      # @teleport-rs/vite — Vite plugin for HMR on generated files
 ```
 
+## Additional Implementations
+
+The repository also contains first-party non-Rust implementations built against the same contract boundary.
+
+```
+dotnet/
+├── src/Teleport.Net             # Attributes, result/error types, contract export
+├── src/Teleport.Net.AspNetCore  # ASP.NET Core discovery, binding, auth, manifest, runtime
+├── examples/Teleport.Net.Demo   # Reference demo app
+└── tests/                       # Exporter/runtime parity coverage
+```
+
+```
+go/
+├── teleport/          # Contract types, result/error helpers, procedure builders
+├── teleporthttp/      # net/http runtime, auth hook, manifest endpoint
+└── examples/demo/     # Reference demo app and contract export
+```
+
+The intended architectural cutoff is:
+
+- Rust internals stay Rust-specific
+- language-neutral behavior lives in `teleport-contract`
+- TypeScript generation consumes the contract bundle, not Rust-only discovery
+- `.NET`, Go, and future implementations match the shared contract and externally visible wire semantics
+
 ## Procedure Collection
 
 teleport-rs uses the [`inventory`](https://docs.rs/inventory) crate for zero-config procedure registration:
 
 1. `#[remote(query)]` expands to a function + an `inventory::submit!(ProcedureRegistration { ... })` call
-2. At startup, `TeleportRouter::export()` calls `inventory::iter::<ProcedureRegistration>()` to collect all registered procedures
-3. The collected procedures are passed to `teleport-build` for TypeScript generation
+2. At export time, `TeleportRouter::contract()` / `TeleportRouter::export()` call `inventory::iter::<ProcedureRegistration>()` to collect all registered procedures
+3. Rust-specific metadata and Specta-discovered types are mapped into a `teleport-contract::ContractBundle`
+4. `teleport-build` consumes that contract bundle to generate TypeScript bindings
 
 This is why export runs as part of the main binary (not `build.rs`) — `inventory` relies on linker-generated data that only exists in the final linked binary.
 
@@ -41,9 +69,48 @@ Type conversion from Rust to TypeScript is handled by [Specta](https://docs.rs/s
 3. `specta-typescript` renders the TypeScript definitions
 
 Generated output:
+
 - `types.ts` — interfaces for all `#[teleport_type]` structs/enums
 - `client.ts` — explicit-client RPC helpers plus `bindClient(client)` namespaced wrappers (e.g., `users.getUser`)
 - `errors.ts` — `AppError<T>` union types matching Rust error variants
+
+The same export pass can also write `teleport.contract.json` via `TeleportRouter::export_contract(...)`. That file is the handoff point for `.NET`, Go, and any future implementation: native backends produce the same contract shape, then `teleport-cli generate-ts` produces the frontend bindings.
+
+## Cross-language implementations
+
+The contract boundary is no longer theoretical. The repo currently has:
+
+- Rust in `crates/`
+- `.NET` in `dotnet/`
+- Go in `go/`
+
+All implementations are expected to align on:
+
+- contract schema shape (`teleport-contract::ContractBundle`)
+- route shape (`/rpc/{namespace}.{method}`)
+- request encoding semantics for query / command / form procedures
+- tagged `AppError` response envelopes and HTTP status mapping
+
+Everything above that boundary remains native to the host stack. Rust keeps proc macros, `inventory`, Axum integration, and Specta-backed export internals. `.NET` keeps attribute discovery, ASP.NET endpoint mapping, and `System.Text.Json`-based type export/runtime binding. Go currently uses explicit procedure registration and a small `net/http` runtime instead of discovery or macro-based authoring.
+
+The authoring syntax is deliberately not identical across languages:
+
+- Rust uses `#[remote(query)]`, `#[remote(command)]`, and `#[remote(form)]` proc macros.
+- `.NET` uses `[TeleportModule]`, `[TeleportQuery]`, `[TeleportCommand]`, `[TeleportForm]`, and static procedure methods.
+- Go uses explicit builders like `teleport.QueryFor[TIn, TOut](...)` and `teleport.QueryWithErrorFor[TIn, TOut, TErr](...)`.
+
+That syntax should stay idiomatic per platform. The invariant is the exported contract and wire behavior, not the internal implementation shape.
+
+## Parity Gates
+
+Cross-language parity is enforced at the demo contract boundary:
+
+1. `npm run demo:export` exports the Rust demo contract.
+2. `npm run demo:export:dotnet` exports the `.NET` demo contract and regenerates the frontend bindings through `teleport-cli`.
+3. `npm run demo:export:go` exports the Go demo contract and regenerates the frontend bindings through `teleport-cli`.
+4. `npm run contracts:parity` compares the Rust, `.NET`, and Go demo contracts.
+
+CI also builds/tests each host implementation independently, then runs frontend check/build against bindings generated from each backend. Passing parity means the demo contracts match; it does not automatically prove every future API surface is equivalent, so new contract features should add coverage in Rust, `.NET`, Go, and the shared TypeScript generator.
 
 ## Error Architecture
 
@@ -59,24 +126,24 @@ pub enum AppError<T = ()> {
 }
 ```
 
-On the TypeScript side, this becomes a discriminated union. The `T` parameter flows end-to-end: Rust procedure → generated client → TypeScript call site. Procedures that don't need specific errors use `AppError` (defaults `T = ()`).
+On the TypeScript side, this becomes a discriminated union. The `T` parameter flows end-to-end: backend procedure → generated client → TypeScript call site. Procedures that don't need specific errors use `AppError` (defaults `T = ()`).
 
 ## Request Flow
 
 ```
-Browser → SvelteKit BFF → Rust (teleport-rs)
+Browser → SvelteKit BFF → native backend
            (optional)
 ```
 
 1. Client calls a bound generated function (e.g., `users.getUser({ id: "123" })`)
 2. The client serializes input and sends an HTTP request (`GET /rpc/users.getUser?id=123`)
-3. Axum routes the request to the generated handler
-4. Auth middleware extracts and validates the session cookie (if the procedure requires `AuthedUser`)
-5. The `#[remote]` handler runs with `&AppState` and returns `Result<T, AppError<E>>`
+3. The host runtime routes the request to the registered procedure
+4. Auth middleware extracts and validates the session cookie if the procedure requires auth
+5. The native handler runs and returns a success payload or `AppError<E>`
 6. The response is serialized as JSON and returned to the client
 7. The client deserializes into `RpcResult<T, E>` — a discriminated union of success, app error, or transport error
 
-Query procedures use GET with `serde_qs` for structured query params. Command procedures use POST with JSON body. Form procedures use POST and accept both `application/x-www-form-urlencoded` and JSON via the `FormOrJson` extractor.
+Query procedures use GET with structured query params. Command procedures use POST with a JSON body. Form procedures use POST with form body semantics. The Rust runtime implements this with Axum extractors (`serde_qs` for query and `FormOrJson` for form); `.NET` and Go implement matching wire behavior in their own runtime binders.
 
 ## Auto-applied safety layers
 

@@ -668,6 +668,14 @@ fn gen_registration(
         .as_ref()
         .map_or_else(|| quote!(None), |p| quote!(Some(#p)));
 
+    let auth_mode_token = if sig.has_auth {
+        quote!(teleport::private::AuthMode::Required)
+    } else if sig.has_optional_auth {
+        quote!(teleport::private::AuthMode::Optional)
+    } else {
+        quote!(teleport::private::AuthMode::None)
+    };
+
     let route_method = match remote_attr.proc_type {
         ProcType::Query => quote!(axum::routing::get),
         ProcType::Command | ProcType::Form => quote!(axum::routing::post),
@@ -696,6 +704,7 @@ fn gen_registration(
                     output_type: #output_type_fn,
                     error_type: #error_type_fn,
                     doc: #doc,
+                    auth_mode: #auth_mode_token,
                     mount_fn: #mount_fn,
                 }
             }

@@ -3,12 +3,15 @@
 use teleport::{AppError, remote};
 
 use crate::state::AppState;
-use crate::types::{GetUserErrorDetail, User};
+use crate::types::{GetUserById, GetUserErrorDetail, User};
 
 /// Fetch a single user by ID.
 #[remote(query)]
-async fn get_user(ctx: &AppState, id: String) -> Result<User, AppError<GetUserErrorDetail>> {
-    ctx.get_user(&id)
+async fn get_user(
+    ctx: &AppState,
+    input: GetUserById,
+) -> Result<User, AppError<GetUserErrorDetail>> {
+    ctx.get_user(&input.id)
         .cloned()
         .ok_or(AppError::detail(GetUserErrorDetail {
             user_not_found: true,

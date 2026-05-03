@@ -38,7 +38,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use teleport_build::{Config, export_from_inventory};
-use teleport_core::{HttpMethod, ProcedureRegistration, ProcedureType};
+use teleport_core::{AuthMode, HttpMethod, ProcedureRegistration, ProcedureType};
 
 // ---------------------------------------------------------------------------
 // Fixture types — one per category. All registered via procedures below so
@@ -163,6 +163,7 @@ inventory::submit! {
         output_type: |types| <AllPrimitives as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -178,6 +179,7 @@ inventory::submit! {
         output_type: |types| <BigIntPrimitives as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -193,6 +195,7 @@ inventory::submit! {
         output_type: |types| <ContainerTypes as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -208,6 +211,7 @@ inventory::submit! {
         output_type: |types| <NestedStruct as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -223,6 +227,7 @@ inventory::submit! {
         output_type: |types| <NewtypeWrapper as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -238,6 +243,7 @@ inventory::submit! {
         output_type: |types| <EnumWrapper as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -254,6 +260,7 @@ inventory::submit! {
         output_type: |types| <Vec<VecItem> as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -270,6 +277,7 @@ inventory::submit! {
         output_type: |types| <String as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -286,6 +294,7 @@ inventory::submit! {
         output_type: |types| <Vec<Vec<String>> as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -345,6 +354,7 @@ inventory::submit! {
         output_type: |types| <KnownBugEnum as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -360,6 +370,7 @@ inventory::submit! {
         output_type: |types| <KnownBugTaggedEnum as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }
@@ -375,6 +386,7 @@ inventory::submit! {
         output_type: |types| <WorkaroundErrorDetail as Type>::definition(types),
         error_type: |types| <() as Type>::definition(types),
         doc: "",
+        auth_mode: AuthMode::None,
         mount_fn: stub_mount,
     }
 }

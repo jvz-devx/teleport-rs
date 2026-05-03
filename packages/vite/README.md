@@ -1,7 +1,7 @@
 # @teleport-rs/vite
 
-Vite plugin for [teleport-rs](https://github.com/refactor-goblin/teleport-rs).
-Watches the directory where your Rust server writes its generated
+Vite plugin for [teleport-rs](https://github.com/jvz-devx/teleport-rs).
+Watches the directory where your backend export command writes generated
 TypeScript bindings and triggers granular HMR updates when they change.
 
 ## Install
@@ -35,8 +35,7 @@ export default defineConfig({
 The plugin:
 
 - Watches `bindingsPath` for changes to `types.ts`, `client.ts`, and
-  `errors.ts` (whichever your Rust server emits via
-  `TeleportRouter::export`).
+  `errors.ts` (whichever your backend export command emits).
 - Triggers a module graph invalidation so importers HMR without a full
   page reload.
 - Warns at dev-server start if `bindingsPath` is missing or empty, with
@@ -76,7 +75,7 @@ interface TeleportViteOptions {
 In two terminals:
 
 ```bash
-# terminal 1: rust server, auto-regenerates bindings on every build
+# terminal 1: backend server, auto-regenerates bindings on every build
 cargo watch -x run
 
 # terminal 2: vite, HMRs on every binding write
@@ -98,5 +97,5 @@ teleportVite({
 The object form is the recommended path. `true` and string values are
 kept as shorthand compatibility options.
 
-See [the main repo](https://github.com/refactor-goblin/teleport-rs)
+See [the main repo](https://github.com/jvz-devx/teleport-rs)
 for the full walkthrough.

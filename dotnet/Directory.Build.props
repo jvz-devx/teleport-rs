@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+    <Nullable Condition="'$(Nullable)' == ''">enable</Nullable>
+    <ImplicitUsings Condition="'$(ImplicitUsings)' == ''">enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <Version>1.0.0</Version>
+    <Authors>teleport-rs contributors</Authors>
+    <Company>teleport-rs contributors</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/jvz-devx/teleport-rs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jvz-devx/teleport-rs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>teleport;rpc;typescript;codegen</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

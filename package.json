@@ -4,7 +4,14 @@
   "packageManager": "npm@11.9.0",
   "scripts": {
     "build:js": "npm run build -w @teleport-rs/client && npm run build -w @teleport-rs/vite",
-    "demo:export": "cargo run -p teleport-demo --bin server -- --export-only"
+    "demo:export": "cargo run -p teleport-demo --bin server -- --export-only",
+    "demo:export:dotnet": "DOTNET_CLI_HOME=/tmp dotnet build dotnet/examples/Teleport.Net.Demo/Teleport.Net.Demo.csproj -c Release -maxcpucount:1 -nodeReuse:false && DOTNET_CLI_HOME=/tmp dotnet run --project dotnet/examples/Teleport.Net.Demo/Teleport.Net.Demo.csproj -c Release --no-build -- --export-only && cargo run -p teleport-cli -- generate-ts --input dotnet/examples/Teleport.Net.Demo/teleport.contract.json --output examples/demo/frontend/src/lib/api/generated",
+    "demo:export:go": "cd go && GOCACHE=/tmp/go-build CGO_ENABLED=0 go run ./examples/demo --export-only && cd .. && cargo run -p teleport-cli -- generate-ts --input go/examples/demo/teleport.contract.json --output examples/demo/frontend/src/lib/api/generated",
+    "contracts:parity": "node scripts/check-contract-parity.mjs",
+    "dotnet:build": "DOTNET_CLI_HOME=/tmp dotnet build dotnet/Teleport.Net.sln -c Release -maxcpucount:1 -nodeReuse:false",
+    "dotnet:test": "DOTNET_CLI_HOME=/tmp dotnet test dotnet/Teleport.Net.sln -c Release -maxcpucount:1 -nodeReuse:false",
+    "go:build": "cd go && GOCACHE=/tmp/go-build CGO_ENABLED=0 go build ./...",
+    "go:test": "cd go && GOCACHE=/tmp/go-build CGO_ENABLED=0 go test ./..."
   },
   "workspaces": [
     "packages/*",

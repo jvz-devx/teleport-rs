@@ -8,6 +8,4 @@ import type { AppError } from "@teleport-rs/client";
 import type { SnapshotCreateUserError } from "./types";
 
 // Procedure-specific error aliases
-export type CheckError = AppError<null>;
 export type CreateUserError = AppError<SnapshotCreateUserError>;
-export type GetUserError = AppError<null>;

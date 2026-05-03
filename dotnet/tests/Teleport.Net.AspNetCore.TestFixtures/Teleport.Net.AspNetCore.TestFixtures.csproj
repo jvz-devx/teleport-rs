@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Teleport.Net/Teleport.Net.csproj" />
+    <ProjectReference Include="../Teleport.Net.TestFixtures/Teleport.Net.TestFixtures.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

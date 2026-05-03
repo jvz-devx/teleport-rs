@@ -1,5 +1,5 @@
 {
-  description = "teleport-rs dev shell (Rust 1.93 MSRV + Node/npm + CI tooling)";
+  description = "teleport-rs dev shell (Rust 1.93 + Node/npm + .NET 10 + Go + CI tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -24,7 +24,7 @@
           overlays = [ (import rust-overlay) ];
         };
 
-        # Pinned to the declared MSRV (`rust-version = "1.91"` in the
+        # Pinned to the declared MSRV (`rust-version = "1.93"` in the
         # workspace Cargo.toml). This is exactly what CI's `msrv` job
         # runs, so `cargo check --workspace` inside this shell is a
         # faithful local reproduction.
@@ -46,6 +46,12 @@
 
             # JavaScript side.
             nodejs
+
+            # .NET side.
+            dotnet-sdk_10
+
+            # Go side.
+            go
 
             # Matches the CI `cargo-deny` job.
             cargo-deny
@@ -70,6 +76,8 @@
             echo "  cargo : $(cargo --version)"
             echo "  node  : $(node --version)"
             echo "  npm   : $(npm --version)"
+            echo "  dotnet: $(dotnet --version)"
+            echo "  go    : $(go version)"
             echo ""
             echo "Run the full CI check suite locally:"
             echo "  cargo fmt --all --check"
@@ -80,6 +88,7 @@
             echo "  cargo deny --all-features check"
             echo "  npm exec tsc --noEmit -p packages/client/tsconfig.json"
             echo "  npm exec tsc --noEmit -p packages/vite/tsconfig.json"
+            echo "  (cd go && CGO_ENABLED=0 go test ./...)"
             echo ""
           '';
         };

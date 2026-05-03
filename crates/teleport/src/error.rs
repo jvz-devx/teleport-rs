@@ -73,3 +73,133 @@ impl<T: Serialize> IntoResponse for AppError<T> {
         (status, [("content-type", "application/json")], body).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use axum::body;
+    use serde::Serialize;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    #[derive(Debug, Clone, Serialize)]
+    struct DetailPayload {
+        code: u16,
+    }
+
+    struct FailingSerialize;
+
+    impl Serialize for FailingSerialize {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("boom"))
+        }
+    }
+
+    fn response_json<T: Serialize>(error: AppError<T>) -> (StatusCode, Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .expect("content-type");
+        assert_eq!(content_type, "application/json");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build tokio runtime");
+        let body = runtime
+            .block_on(body::to_bytes(response.into_body(), usize::MAX))
+            .expect("read response body");
+        let json = serde_json::from_slice(&body).expect("parse response json");
+        (status, json)
+    }
+
+    #[test]
+    fn shared_variants_map_to_expected_status_codes_and_payloads() {
+        let cases = [
+            (
+                AppError::<()>::Unauthorized,
+                StatusCode::UNAUTHORIZED,
+                json!({ "type": "Unauthorized" }),
+            ),
+            (
+                AppError::<()>::Forbidden,
+                StatusCode::FORBIDDEN,
+                json!({ "type": "Forbidden" }),
+            ),
+            (
+                AppError::<()>::NotFound,
+                StatusCode::NOT_FOUND,
+                json!({ "type": "NotFound" }),
+            ),
+            (
+                AppError::<()>::BadRequest {
+                    message: "bad input".to_owned(),
+                },
+                StatusCode::BAD_REQUEST,
+                json!({ "type": "BadRequest", "message": "bad input" }),
+            ),
+            (
+                AppError::<()>::Internal {
+                    message: "db offline".to_owned(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "type": "Internal", "message": "db offline" }),
+            ),
+            (
+                AppError::<()>::RateLimited,
+                StatusCode::TOO_MANY_REQUESTS,
+                json!({ "type": "RateLimited" }),
+            ),
+        ];
+
+        for (error, expected_status, expected_json) in cases {
+            let (status, json) = response_json(error);
+            assert_eq!(status, expected_status);
+            assert_eq!(json, expected_json);
+        }
+    }
+
+    #[test]
+    fn detail_variant_serializes_payload_from_helpers() {
+        let expected = json!({
+            "type": "Detail",
+            "detail": { "code": 422 }
+        });
+
+        let from_impl: AppError<DetailPayload> = DetailPayload { code: 422 }.into();
+        let (status, json) = response_json(from_impl);
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(json, expected);
+
+        let from_ctor = AppError::detail(DetailPayload { code: 422 });
+        let (status, json) = response_json(from_ctor);
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(json, expected);
+    }
+
+    #[test]
+    fn falls_back_to_internal_body_when_error_payload_cannot_serialize() {
+        let response = AppError::detail(FailingSerialize).into_response();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build tokio runtime");
+        let body = runtime
+            .block_on(body::to_bytes(response.into_body(), usize::MAX))
+            .expect("read response body");
+
+        assert_eq!(
+            std::str::from_utf8(&body).expect("utf8 body"),
+            r#"{"type":"Internal","message":"error serialization failed"}"#
+        );
+    }
+}

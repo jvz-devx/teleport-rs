@@ -93,3 +93,38 @@ pub enum NamingCase {
     #[default]
     CamelCase,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn new_uses_expected_defaults() {
+        let config = Config::new("generated");
+
+        assert_eq!(config.output_dir, Path::new("generated"));
+        assert!(matches!(config.namespace_style, NamespaceStyle::ModulePath));
+        assert!(matches!(config.naming.case, NamingCase::CamelCase));
+        assert_eq!(config.route_prefix, "/rpc");
+        assert_eq!(config.client_import_path, None);
+    }
+
+    #[test]
+    fn builder_methods_override_selected_fields() {
+        let config = Config::new("generated")
+            .with_prefix("/api/rpc")
+            .with_client_import("~/rpc-client")
+            .with_namespace_style(NamespaceStyle::ModulePath)
+            .with_naming(Naming {
+                case: NamingCase::CamelCase,
+            });
+
+        assert_eq!(config.output_dir, Path::new("generated"));
+        assert_eq!(config.route_prefix, "/api/rpc");
+        assert_eq!(config.client_import_path.as_deref(), Some("~/rpc-client"));
+        assert!(matches!(config.namespace_style, NamespaceStyle::ModulePath));
+        assert!(matches!(config.naming.case, NamingCase::CamelCase));
+    }
+}

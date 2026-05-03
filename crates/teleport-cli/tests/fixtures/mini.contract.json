@@ -1,0 +1,92 @@
+{
+  "version": "teleport.contract/v1",
+  "procedures": [
+    {
+      "name": "users.getUser",
+      "namespace": "users",
+      "method_name": "getUser",
+      "procedure_kind": "Query",
+      "http_method": "Get",
+      "path": "/rpc/users.getUser",
+      "input_encoding": "QueryString",
+      "auth_mode": "None",
+      "doc": "Fetch one user.",
+      "input_type": {
+        "Named": {
+          "name": "UserId",
+          "generics": []
+        }
+      },
+      "output_type": {
+        "Named": {
+          "name": "User",
+          "generics": []
+        }
+      },
+      "error_type": {
+        "Named": {
+          "name": "GetUserErrorDetail",
+          "generics": []
+        }
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "UserId",
+      "docs": "",
+      "generics": [],
+      "kind": {
+        "Alias": {
+          "Primitive": "str"
+        }
+      }
+    },
+    {
+      "name": "User",
+      "docs": "",
+      "generics": [],
+      "kind": {
+        "Struct": {
+          "Named": [
+            {
+              "name": "id",
+              "docs": "",
+              "optional": false,
+              "ty": {
+                "Primitive": "str"
+              }
+            },
+            {
+              "name": "name",
+              "docs": "",
+              "optional": false,
+              "ty": {
+                "Primitive": "str"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GetUserErrorDetail",
+      "docs": "",
+      "generics": [],
+      "kind": {
+        "Struct": {
+          "Named": [
+            {
+              "name": "message",
+              "docs": "",
+              "optional": false,
+              "ty": {
+                "Primitive": "str"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
